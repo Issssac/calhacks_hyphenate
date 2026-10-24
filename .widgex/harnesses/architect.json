@@ -1,0 +1,84 @@
+{
+  "version": 2,
+  "name": "architect",
+  "description": "Investigates the books and compiles the revenue desk's driver workflows",
+  "states": {
+    "begin": {
+      "prompt": "Revenue desk / workflow `architect` / state `begin`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/architect/begin.md and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `architect-agent` with role `architect`; pass --workflow architect on every ledger write.",
+      "transitions": [
+        {
+          "to": "design",
+          "precedence": 10,
+          "kind": "soft",
+          "question": "Have you surveyed Odoo, the bank and the inbox, and recorded what you found as structure.* events?"
+        }
+      ]
+    },
+    "design": {
+      "prompt": "Revenue desk / workflow `architect` / state `design`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/architect/design.md and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `architect-agent` with role `architect`; pass --workflow architect on every ledger write.",
+      "transitions": [
+        {
+          "to": "compile",
+          "precedence": 10,
+          "kind": "hard",
+          "question": "Have you written company_profile.md, policy.json and pipeline.json?",
+          "check": {
+            "file": "C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/checks/ledger_checks.py",
+            "function": "architect_profile_written"
+          }
+        }
+      ]
+    },
+    "compile": {
+      "prompt": "Revenue desk / workflow `architect` / state `compile`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/architect/compile.md and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `architect-agent` with role `architect`; pass --workflow architect on every ledger write.",
+      "transitions": [
+        {
+          "to": "propose",
+          "precedence": 10,
+          "kind": "hard",
+          "question": "Is every enabled driver compiled, checked with api.harness_check, and recorded?",
+          "check": {
+            "file": "C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/checks/ledger_checks.py",
+            "function": "architect_all_validated"
+          }
+        }
+      ]
+    },
+    "propose": {
+      "prompt": "Revenue desk / workflow `architect` / state `propose`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/architect/propose.md and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `architect-agent` with role `architect`; pass --workflow architect on every ledger write.",
+      "review": {},
+      "transitions": [
+        {
+          "to": "spawn",
+          "precedence": 10,
+          "kind": "human",
+          "decision": "approve",
+          "question": "Adopt this pipeline and start its agents?"
+        },
+        {
+          "to": "design",
+          "precedence": 20,
+          "kind": "human",
+          "decision": "reject",
+          "question": "Send the design back (say what to change in the note)?"
+        }
+      ]
+    },
+    "spawn": {
+      "prompt": "Revenue desk / workflow `architect` / state `spawn`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/architect/spawn.md and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `architect-agent` with role `architect`; pass --workflow architect on every ledger write.",
+      "transitions": [
+        {
+          "to": "done",
+          "precedence": 10,
+          "kind": "soft",
+          "question": "Did you promote every driver and start its agent, or rest because starting was refused?"
+        }
+      ]
+    },
+    "done": {
+      "prompt": "Revenue desk / workflow `architect` / state `done`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/architect/done.md if it exists, otherwise C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_tail/done.md, and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `architect-agent` with role `architect`; pass --workflow architect on every ledger write.",
+      "terminal": true,
+      "transitions": []
+    }
+  }
+}

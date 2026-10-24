@@ -20,7 +20,6 @@ def make_pdf(path, lines):
 
 def test_save_message_extracts_pdf_pages(tmp_path, monkeypatch):
     monkeypatch.setattr(gmail, "RAW_DIR", tmp_path / "raw")
-    monkeypatch.setattr(gmail, "REPO_ROOT", tmp_path)
     pdf = tmp_path / "Q-778.pdf"
     make_pdf(pdf, ["QUOTATION Q-778", "Galvanized shackle 1/2in  qty 200  @ 4.10", "Total 820.00"])
 
@@ -36,7 +35,8 @@ def test_save_message_extracts_pdf_pages(tmp_path, monkeypatch):
     assert "4.00 each" in out["body_excerpt"]
     att = out["attachments"][0]
     assert att["name"] == "Q-778.pdf" and att["pages"] == 1 and not att["no_text_layer"]
-    assert "4.10" in (tmp_path / att["text_path"]).read_text(encoding="utf-8")
+    from pathlib import Path
+    assert "4.10" in Path(att["text_path"]).read_text(encoding="utf-8")
 
 
 def test_mail_flows_to_the_right_queue(tmp_path):

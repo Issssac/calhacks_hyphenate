@@ -103,6 +103,13 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("verify", help="check the hash chain")
     sub.add_parser("feedback", help="overrules and mistakes not yet addressed")
 
+    fo = sub.add_parser("focus", help="declare the item a driver is working on (what its checks look at)")
+    fo.add_argument("driver")
+    fo.add_argument("entity")
+    fo.add_argument("--actor", default=os.environ.get("LEDGER_ACTOR"))
+    fo.add_argument("--role", default=os.environ.get("LEDGER_ROLE"))
+    fo.add_argument("--workflow-version", type=int)
+
     n = sub.add_parser("next-id", help="next unused id for a type")
     n.add_argument("entity_type")
     n.add_argument("prefix")
@@ -130,6 +137,16 @@ def main(argv: list[str] | None = None) -> int:
                 links=links, run_id=args.run_id, workflow=args.workflow,
                 workflow_version=args.workflow_version, on_behalf_of=args.on_behalf_of,
             ))
+            return 0
+
+        if args.cmd == "focus":
+            if not args.actor or not args.role:
+                raise db.LedgerError("--actor and --role are required")
+            conn = db.connect(path)
+            _out(db.append(conn, actor=args.actor, role=args.role, kind="note.focus",
+                           entity=f"focus:{args.driver}", payload={"entity": args.entity},
+                           workflow=args.driver,
+                           workflow_version=args.workflow_version))
             return 0
 
         conn = db.connect(path, readonly=True)

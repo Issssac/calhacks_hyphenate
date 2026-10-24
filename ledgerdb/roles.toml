@@ -31,6 +31,10 @@ kinds = ["payment.received", "payment.applied", "payment.short", "payment.over",
 [roles.reconcile]
 kinds = ["recon.*"]
 
+# The hard-transition checks in checks/ledger_checks.py. Code, not an agent.
+[roles.checker]
+kinds = ["check.result"]
+
 # Pulls what changed in Odoo and at the bank. Writes nothing to either.
 [roles.tracker]
 kinds = ["erp.changed", "bank.transaction"]

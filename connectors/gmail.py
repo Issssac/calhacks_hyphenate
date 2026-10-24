@@ -40,7 +40,7 @@ import requests
 
 from ledgerdb import db
 from . import pdftext
-from .env import REPO_ROOT, need, read_token, write_token
+from .env import DATA_DIR, need, read_token, write_token
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -49,7 +49,7 @@ SCOPES = {
     "read": ["https://www.googleapis.com/auth/gmail.readonly"],
     "send": ["https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.modify"],
 }
-RAW_DIR = REPO_ROOT / "inbox" / "raw"
+RAW_DIR = DATA_DIR / "inbox" / "raw"  # untrusted content, one folder per message
 
 
 class GmailError(RuntimeError):
@@ -188,13 +188,12 @@ def save_message(msg_id: str, raw: bytes, meta: dict) -> dict:
         data = part.get_payload(decode=True) or b""
         path = folder / "attachments" / name
         path.write_bytes(data)
-        info: dict[str, Any] = {"n": i, "name": name, "path": str(path.relative_to(REPO_ROOT)),
+        info: dict[str, Any] = {"n": i, "name": name, "path": str(path),
                                 "content_type": part.get_content_type(), "bytes": len(data),
                                 "sha256": hashlib.sha256(data).hexdigest()}
         if part.get_content_type() == "application/pdf" or name.lower().endswith(".pdf"):
             try:
                 info.update(pdftext.extract_to(path, path.with_suffix(".pages.json")))
-                info["text_path"] = str(Path(info["text_path"]).relative_to(REPO_ROOT))
             except Exception as e:
                 info["pdf_error"] = str(e)
         atts.append(info)
@@ -202,7 +201,7 @@ def save_message(msg_id: str, raw: bytes, meta: dict) -> dict:
         "gmail_id": msg_id, "thread_id": meta.get("threadId"), "from": str(msg.get("From", "")),
         "to": str(msg.get("To", "")), "subject": str(msg.get("Subject", "")), "date": str(msg.get("Date", "")),
         "message_id_header": str(msg.get("Message-ID", "")), "in_reply_to": str(msg.get("In-Reply-To", "")),
-        "body_path": str((folder / "body.txt").relative_to(REPO_ROOT)), "body_excerpt": body[:1500],
+        "body_path": str(folder / "body.txt"), "body_excerpt": body[:1500],
         "attachments": atts, "label_ids": meta.get("labelIds", []),
     }
 
@@ -222,6 +221,21 @@ def pull(conn, g: Gmail, ctx: dict, label: str | None = None, newer_than: str = 
         new.append({"entity": entity, "subject": payload["subject"], "from": payload["from"],
                     "attachments": [a["name"] for a in payload["attachments"]]})
     return {"label": label, "new": new}
+
+
+def peek(g: Gmail, label: str | None = None, n: int = 10) -> list[dict]:
+    """Read-only sample of recent mail for the architect. Writes nothing to the ledger."""
+    label = label or os.environ.get("GMAIL_LABEL", "quotes")
+    out = []
+    for msg_id in g.list_ids(f'label:"{label}"')[:n]:
+        data = g.request("GET", f"/messages/{msg_id}", params={"format": "metadata",
+                                                               "metadataHeaders": ["From", "Subject", "Date"]})
+        headers = {h["name"]: h["value"] for h in data.get("payload", {}).get("headers", [])}
+        parts = data.get("payload", {}).get("parts", []) or []
+        out.append({"id": msg_id, "from": headers.get("From"), "subject": headers.get("Subject"),
+                    "date": headers.get("Date"), "snippet": data.get("snippet"),
+                    "attachments": [p.get("filename") for p in parts if p.get("filename")]})
+    return out
 
 
 # ---------------------------------------------------------------- send (seed only)
@@ -263,6 +277,9 @@ def main(argv: list[str] | None = None) -> int:
     pl.add_argument("--workflow-version", type=int)
     pl.add_argument("--label")
     pl.add_argument("--newer-than", default="30d")
+    pk = sub.add_parser("peek")
+    pk.add_argument("--label")
+    pk.add_argument("-n", type=int, default=10)
     s = sub.add_parser("send")
     s.add_argument("--to", default="me")
     s.add_argument("--subject", required=True)
@@ -281,6 +298,8 @@ def main(argv: list[str] | None = None) -> int:
             ctx = {"actor": args.actor, "role": args.role, "run_id": args.run_id, "workflow": args.workflow,
                    "workflow_version": args.workflow_version}
             out(pull(conn, Gmail("read"), ctx, args.label, args.newer_than))
+        elif args.cmd == "peek":
+            out(peek(Gmail("read"), args.label, args.n))
         elif args.cmd == "send":
             body = Path(args.body[1:]).read_text(encoding="utf-8") if args.body.startswith("@") else args.body
             out(send(Gmail("send"), args.to, args.subject, body, [Path(a) for a in args.attach],

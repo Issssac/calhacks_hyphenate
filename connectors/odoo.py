@@ -165,6 +165,11 @@ def survey(o: Odoo) -> dict:
                                    ["name", "email", "property_payment_term_id", "credit", "vat"]),
         "vendors": o.search_read("res.partner", [("supplier_rank", ">", 0)],
                                  ["name", "email", "property_supplier_payment_term_id", "debit"]),
+        "bank_accounts": [{"partner": b["partner_id"][1] if b["partner_id"] else None,
+                           "account_number": b["acc_number"],
+                           "routing_number": (o.read("res.bank", [b["bank_id"][0]], ["bic"])[0]["bic"]
+                                              if b["bank_id"] else None)}
+                          for b in o.search_read("res.partner.bank", [], ["partner_id", "acc_number", "bank_id"])],
         "open_sales": o.search_read("sale.order", [("state", "in", ["draft", "sent", "sale"])],
                                     ["name", "partner_id", "state", "amount_total", "invoice_status"], limit=50),
         "open_purchases": o.search_read("purchase.order", [("state", "in", ["draft", "sent", "purchase"])],
@@ -278,13 +283,27 @@ def stage(conn, o: Odoo, entity: str, ctx: dict) -> dict:
         model = "account.move"
         if not existing:
             _, po = _posted_parent(conn, o, entity, "from_po")
-            o.call("purchase.order", "action_create_invoice", [po["id"]])
-            bill_ids = o.read("purchase.order", [po["id"]], ["invoice_ids"])[0]["invoice_ids"]
-            drafts = o.search_read("account.move", [("id", "in", bill_ids), ("state", "=", "draft")], ["id"],
-                                   order="id desc", limit=1)
-            if not drafts:
-                raise OdooError("Odoo created no draft bill (has the receipt been validated?)")
-            rid = drafts[0]["id"]
+            drafts: list = []
+            try:
+                o.call("purchase.order", "action_create_invoice", [po["id"]])
+                bill_ids = o.read("purchase.order", [po["id"]], ["invoice_ids"])[0]["invoice_ids"]
+                drafts = o.search_read("account.move", [("id", "in", bill_ids), ("state", "=", "draft")], ["id"],
+                                       order="id desc", limit=1)
+            except OdooError:
+                drafts = []  # nothing received yet: Odoo won't bill from the PO
+            if drafts:
+                rid = drafts[0]["id"]
+            else:
+                # Record the bill anyway, tied to the PO lines, so the 3-way match can say
+                # "billed but not received" instead of the bill going missing.
+                pol = o.search_read("purchase.order.line", [("order_id", "=", po["id"])],
+                                    ["id", "product_id", "product_qty", "price_unit", "name"])
+                partner = o.read("purchase.order", [po["id"]], ["partner_id"])[0]["partner_id"][0]
+                rid = o.create("account.move", {
+                    "move_type": "in_invoice", "partner_id": partner,
+                    "invoice_line_ids": [(0, 0, {"product_id": l["product_id"][0], "name": l["name"],
+                                                 "quantity": l["product_qty"], "price_unit": l["price_unit"],
+                                                 "purchase_line_id": l["id"]}) for l in pol]})
         else:
             rid = existing["id"]
         # Set the draft bill to what the vendor actually billed, line by line.
@@ -477,6 +496,34 @@ def three_way(conn, o: Odoo, bill_entity: str) -> dict:
     return {"bill": bill_entity, "po": po.get("name"), "lines": rows, "unmatched_bill_lines": extra}
 
 
+def match(conn, o: Odoo, bill_entity: str, ctx: dict) -> dict:
+    """Compute the 3-way match in code and record bill.matched or bill.mismatch.
+
+    Agents never assert a match themselves; the posting gate for bills accepts
+    either this event or an explicit controller approval of the variance.
+    """
+    from ledgerdb.policy import policy, price_tolerance
+
+    pol = policy()
+    tw = three_way(conn, o, bill_entity)
+    issues = []
+    for ln in tw["lines"]:
+        if ln["billed_unit_cost"] is None:
+            continue
+        tol = price_tolerance(ln["po_unit_cost"], pol)
+        ln["tolerance"] = round(tol, 4)
+        if abs(ln["price_diff"]) > tol + 1e-9:
+            issues.append(f"{ln['item']}: billed {ln['billed_unit_cost']} vs PO {ln['po_unit_cost']}")
+        if ln["qty_over_received"]:
+            issues.append(f"{ln['item']}: billed {ln['billed_qty']} but only {ln['received']} received")
+    if tw["unmatched_bill_lines"]:
+        issues.append(f"{len(tw['unmatched_bill_lines'])} billed line(s) not on the PO")
+    kind = "bill.mismatch" if issues else "bill.matched"
+    ev = db.append(conn, kind=kind, entity=bill_entity, payload={**tw, "issues": issues},
+                   sources=[f"odoo:purchase.order/{tw['po']}"], **ctx)
+    return {"result": kind, "issues": issues, "event": ev, "three_way": tw}
+
+
 def simulate_receipt(conn, o: Odoo, po_entity: str, ctx: dict, qty_factor: float = 1.0) -> dict:
     """Simulation only: the vendor's goods arrive and the warehouse validates the receipt.
 
@@ -565,6 +612,10 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("--reason", default="")
     tr = with_ctx(sub.add_parser("track"))
     tr.add_argument("--since")
+    with_ctx(sub.add_parser("match")).add_argument("entity")
+    sr = with_ctx(sub.add_parser("simulate-receipt"))
+    sr.add_argument("entity")
+    sr.add_argument("--qty-factor", type=float, default=1.0)
 
     args = p.parse_args(argv)
     out = lambda obj: sys.stdout.write(json.dumps(obj, indent=2, default=str) + "\n")
@@ -603,6 +654,10 @@ def main(argv: list[str] | None = None) -> int:
             out(register_payment(conn, o, args.entity, apps, ctx, args.date, args.reason))
         elif args.cmd == "track":
             out(track(conn, o, ctx, args.since))
+        elif args.cmd == "match":
+            out(match(conn, o, args.entity, ctx))
+        elif args.cmd == "simulate-receipt":
+            out(simulate_receipt(conn, o, args.entity, ctx, args.qty_factor))
         return 0
     except (OdooError, db.LedgerError) as e:
         out({"error": str(e)})

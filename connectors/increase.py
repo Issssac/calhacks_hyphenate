@@ -26,9 +26,9 @@ from typing import Any
 import requests
 
 from ledgerdb import db
-from .env import REPO_ROOT, need
+from .env import DATA_DIR, need
 
-BANK_PATH = REPO_ROOT / "structure" / "bank.json"
+BANK_PATH = DATA_DIR / "bank.json"  # sandbox account ids, shared by every worktree
 
 
 class BankError(RuntimeError):
@@ -77,7 +77,7 @@ class Increase:
 
 def load_bank() -> dict:
     if not BANK_PATH.exists():
-        raise BankError("no structure/bank.json yet: run `python -m connectors.increase setup`")
+        raise BankError(f"no {BANK_PATH} yet: run `python -m connectors.increase setup`")
     return json.loads(BANK_PATH.read_text(encoding="utf-8"))
 
 

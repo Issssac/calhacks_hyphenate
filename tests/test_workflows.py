@@ -1,0 +1,154 @@
+"""The hard-transition checks and the workflow version lifecycle, without WidgeX."""
+
+import json
+
+import pytest
+
+import checks.ledger_checks as lc
+from ledgerdb import db
+from workflows import build
+
+ORD = {"actor": "orders-agent", "role": "orders", "workflow": "orders"}
+INT = {"actor": "intake-agent", "role": "intake", "workflow": "intake"}
+
+
+@pytest.fixture
+def conn(tmp_path, monkeypatch):
+    path = tmp_path / "ledger.db"
+    monkeypatch.setenv("LEDGER_DB", str(path))
+    c = db.connect(path)
+    db.init(c)
+    return c
+
+
+def staged(conn, entity, model="sale.order", rid=1, **extra):
+    db.append(conn, kind="erp.staged", entity=entity, payload={"model": model, "id": rid, **extra}, **ORD)
+
+
+def quote(conn, total=1000.0):
+    db.append(conn, kind="quote.received", entity="quote:Q-1", **INT)
+    db.append(conn, kind="quote.extracted", entity="quote:Q-1", payload={
+        "customer": "Pier 39 Boatworks", "total": total,
+        "lines": [{"item": "Shackle", "qty": 200, "unit_price": 5.0, "source": "gmail:x#att1:p1"}]}, **INT)
+
+
+def draft(conn, unit_cost):
+    db.append(conn, kind="so.drafted", entity="so:SO-1", links=[{"rel": "from_quote", "to": "quote:Q-1"}],
+              payload={"customer": "Pier 39 Boatworks", "total": 1000.0,
+                       "lines": [{"item": "Shackle", "qty": 200, "unit_price": 5.0}]}, **ORD)
+    db.append(conn, kind="po.drafted", entity="po:PO-1", links=[{"rel": "for_so", "to": "so:SO-1"}],
+              payload={"vendor": "Harbor Forge", "total": 200 * unit_cost,
+                       "lines": [{"item": "Shackle", "qty": 200, "unit_cost": unit_cost}]}, **ORD)
+    staged(conn, "so:SO-1")
+    staged(conn, "po:PO-1", "purchase.order", 2)
+
+
+def test_intake_extracted_requires_citations(conn):
+    db.append(conn, kind="quote.received", entity="quote:Q-1", **INT)
+    db.append(conn, kind="note.focus", entity="focus:intake", payload={"entity": "quote:Q-1"}, **INT)
+    db.append(conn, kind="quote.extracted", entity="quote:Q-1", payload={
+        "customer": "X", "total": 10, "lines": [{"item": "A", "qty": 1, "unit_price": 10}]}, **INT)
+    assert not lc.intake_extracted()
+    db.append(conn, kind="quote.extracted", entity="quote:Q-1", payload={
+        "customer": "X", "total": 10, "lines": [{"item": "A", "qty": 1, "unit_price": 10, "source": "gmail:m#body"}]},
+        **INT)
+    assert lc.intake_extracted()
+    result = db.rows(conn, "SELECT payload FROM events WHERE kind = 'check.result' ORDER BY seq DESC LIMIT 1")
+    assert result[0]["payload"]["ok"] is True
+
+
+def test_orders_margin_floor(conn):
+    quote(conn)
+    db.append(conn, kind="note.focus", entity="focus:orders", payload={"entity": "quote:Q-1"}, **ORD)
+    draft(conn, unit_cost=4.6)  # 8% margin, floor is 15%
+    assert not lc.orders_drafts_valid()
+    last = db.rows(conn, "SELECT payload FROM events WHERE kind='check.result' ORDER BY seq DESC LIMIT 1")[0]
+    assert any("floor" in p for p in last["payload"]["problems"])
+    db.append(conn, kind="po.amended", entity="po:PO-1", links=[{"rel": "for_so", "to": "so:SO-1"}],
+              payload={"vendor": "Harbor Forge", "total": 700.0,
+                       "lines": [{"item": "Shackle", "qty": 200, "unit_cost": 3.5}]}, **ORD)
+    assert not lc.orders_drafts_valid()  # amended PO not re-staged yet
+    staged(conn, "po:PO-1", "purchase.order", 2)
+    assert lc.orders_drafts_valid()
+
+
+def test_orders_quote_tie_out(conn):
+    quote(conn, total=1100.0)  # quote says 1100, lines say 1000
+    db.append(conn, kind="note.focus", entity="focus:orders", payload={"entity": "quote:Q-1"}, **ORD)
+    draft(conn, unit_cost=3.0)
+    assert not lc.orders_drafts_valid()
+
+
+def test_queue_and_focus_checks(conn):
+    quote(conn)
+    assert not lc.orders_queue_empty()
+    db.append(conn, kind="note.focus", entity="focus:orders", payload={"entity": "quote:Q-1"}, **ORD)
+    assert lc.orders_focus_set() and lc.orders_focus_is_quote() and not lc.orders_focus_is_approved()
+
+
+def test_feedback_checks(conn):
+    assert lc.orders_feedback_closed() and not lc.orders_has_feedback()
+    db.append(conn, kind="feedback.recorded", entity="feedback:F-1",
+              payload={"driver": "orders", "type": "overrule", "note": "use contract price"}, **ORD)
+    assert lc.orders_has_feedback() and not lc.orders_feedback_closed()
+    assert lc.intake_feedback_closed()  # other workflows unaffected
+
+
+def test_version_lifecycle(conn, tmp_path, monkeypatch):
+    for name in ("HARNESS_DIR", "PROPOSED", "HISTORY", "PROMPTS"):
+        monkeypatch.setattr(build, name, tmp_path / name.lower())
+    monkeypatch.setattr(lc, "ROOT", tmp_path)
+    monkeypatch.setattr(build, "PROPOSED", tmp_path / "workflows" / "proposed")
+    ctx = {"actor": "orders-agent", "role": "orders", "workflow": "orders"}
+
+    out = build.compile_(["orders"])
+    assert out[0]["from"] == "template"
+    assert not lc.orders_proposal_valid()  # not validated yet
+    build.record_validation(conn, "orders", True, {"problems": [], "readback": ["Starts in begin."]}, ctx)
+    assert lc.orders_proposal_valid()
+
+    # editing after validation invalidates it
+    p = build.PROPOSED / "orders.json"
+    spec = json.loads(p.read_text())
+    spec["states"]["draft"]["transitions"][1]["question"] += " (edited)"
+    p.write_text(json.dumps(spec))
+    assert not lc.orders_proposal_valid()
+    with pytest.raises(SystemExit):
+        build.promote(conn, "orders", ctx, [])
+    build.record_validation(conn, "orders", True, None, ctx)
+
+    db.append(conn, kind="feedback.recorded", entity="feedback:F-1", payload={"driver": "orders", "note": "x"}, **ctx)
+    r = build.promote(conn, "orders", ctx, ["feedback:F-1"], "first version")
+    assert r["version"] == 1
+    assert lc.orders_feedback_closed()
+    assert (build.HARNESS_DIR / "orders.json").exists() and not p.exists()
+
+    # second version archives the first
+    build.compile_(["orders"])
+    assert build.compile_(["orders"])[0]["from"] == "live"
+    (build.PROPOSED / "prompts" / "orders").mkdir(parents=True)
+    (build.PROPOSED / "prompts" / "orders" / "draft.md").write_text("new rule: check contract prices")
+    build.record_validation(conn, "orders", True, None, ctx)
+    assert "contract prices" in build.diff("orders")
+    r2 = build.promote(conn, "orders", ctx, [], "contract prices")
+    assert r2["version"] == 2
+    assert (build.HISTORY / "orders" / "v1" / "orders.json").exists()
+    assert (build.PROMPTS / "orders" / "draft.md").read_text() == "new rule: check contract prices"
+    assert db.rows(conn, "SELECT version FROM workflow_current")[0]["version"] == 2
+
+
+def test_reject_closes_feedback(conn, tmp_path, monkeypatch):
+    monkeypatch.setattr(build, "PROPOSED", tmp_path / "proposed")
+    ctx = {"actor": "orders-agent", "role": "orders", "workflow": "orders"}
+    db.append(conn, kind="feedback.recorded", entity="feedback:F-1", payload={"driver": "orders"}, **ctx)
+    build.reject(conn, "orders", ctx, ["feedback:F-1"], "one-off: customer typo")
+    assert lc.orders_feedback_closed()
+
+
+def test_every_template_references_real_checks():
+    for d in build.DRIVERS:
+        spec = build.template(d)
+        for st in spec["states"].values():
+            for t in st.get("transitions", []):
+                if t["kind"] == "hard":
+                    assert callable(getattr(lc, t["check"]["function"], None)), t["check"]["function"]

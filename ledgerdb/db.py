@@ -42,9 +42,16 @@ class LedgerError(ValueError):
     """A write the ledger refused. The message says which rule and why."""
 
 
+def desk_home() -> Path:
+    """One folder per machine for shared state, outside any checkout, so every
+    agent appends to the same ledger whichever worktree it runs in."""
+    env = os.environ.get("REVENUE_DESK_HOME")
+    return Path(env) if env else Path.home() / ".revenue-desk"
+
+
 def default_path() -> Path:
     env = os.environ.get("LEDGER_DB")
-    return Path(env) if env else REPO_ROOT / "data" / "ledger.db"
+    return Path(env) if env else desk_home() / "ledger.db"
 
 
 def connect(path: Path | str | None = None, readonly: bool = False) -> sqlite3.Connection:
