@@ -225,6 +225,41 @@ def _check_posting(conn: sqlite3.Connection, policy: Policy, entity: str, etype:
     raise LedgerError(f"unknown posting rule {rule!r} for {etype!r}")
 
 
+def check_post(conn: sqlite3.Connection, entity: str, links: list[dict[str, Any]] | None = None,
+               policy: Policy | None = None) -> None:
+    """Raise LedgerError unless `entity` may be posted to QBO right now."""
+    etype = _check_entity(entity)
+    _check_posting(conn, policy or load_policy(), entity, etype, _norm_links(links))
+
+
+def latest_payload(conn: sqlite3.Connection, entity: str) -> dict[str, Any] | None:
+    row = conn.execute("SELECT payload FROM doc_latest WHERE entity = ?", (entity,)).fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def qbo_ref(conn: sqlite3.Connection, entity: str) -> dict[str, Any] | None:
+    """The QBO object an entity was last posted as: {qbo_type, qbo_id, ...}."""
+    row = conn.execute(
+        "SELECT payload FROM events WHERE entity = ? AND kind = 'qbo.posted' ORDER BY seq DESC LIMIT 1",
+        (entity,),
+    ).fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def entity_for_qbo(conn: sqlite3.Connection, qbo_type: str, qbo_id: str) -> str | None:
+    row = conn.execute(
+        "SELECT entity FROM events WHERE kind = 'qbo.posted'"
+        " AND json_extract(payload, '$.qbo_type') = ? AND json_extract(payload, '$.qbo_id') = ?"
+        " ORDER BY seq DESC LIMIT 1",
+        (qbo_type, str(qbo_id)),
+    ).fetchone()
+    return row[0] if row else None
+
+
+def links_of(conn: sqlite3.Connection, entity: str, rel: str) -> list[str]:
+    return _parents(conn, entity, rel, [])
+
+
 # ---------------------------------------------------------------- append
 
 def append(
