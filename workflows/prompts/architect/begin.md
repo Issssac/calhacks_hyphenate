@@ -13,7 +13,9 @@ books, bank and inbox actually work. Don't assume; look. Run tools from the repo
    - anything already open (draft or confirmed orders).
 2. **The bank.** `python -m connectors.increase balance`, and the account in `~/.revenue-desk/bank.json`.
    Note the current balance as the opening position.
-3. **The inbox.** `python -m connectors.gmail peek -n 15`: a read-only sample. What do quotes look
+3. **The inbox.** `python -m connectors.gmail peek -n 15`: a read-only sample. If Gmail isn't
+   connected, look at the `.eml` files waiting in the drop folder (`python -m connectors.inbox where`)
+   and at any `mail.received` already in the ledger. What do quotes look
    like here: PDF tables, prose in the body, forwarded threads? Who sends them? Do they state our
    cost and supplier, or only the customer's price? Are vendor bills and remittances arriving too?
 4. **Record what you found**, one event per topic, on `structure:<topic>`:

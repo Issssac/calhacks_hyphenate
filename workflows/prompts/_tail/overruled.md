@@ -3,6 +3,10 @@
 The controller rejected your work. Their note is in the message that brought you to this
 state. Read it carefully.
 
+0. **Record the decision.** Append `approval.rejected` on the item that was reviewed, on the
+   controller's behalf (`--role controller --on-behalf-of <controller from policy.json>`), with
+   `{"note": "<their words, verbatim>", "state": "<the review state>"}`. For a rejected workflow
+   revision, skip this step; that isn't an item.
 1. **Make the item right first.** Apply what the controller said: re-draft, re-stage or
    correct, with new events. Corrections are new events; never try to remove old ones.
    If their note leaves the right answer unclear, record what you did understand in a

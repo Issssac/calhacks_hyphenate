@@ -392,22 +392,36 @@ def verify(conn: sqlite3.Connection) -> dict[str, Any]:
     return {"ok": not problems, "events": n, "head": prev, "problems": problems}
 
 
+# Links that describe governance (feedback about a document, a revision answering feedback)
+# rather than the document chain. Trace shows them one hop out but does not walk through
+# them, so one workflow revision doesn't join every deal it was ever about.
+GOVERNANCE_RELS = ("about", "addresses")
+
+
 def trace(conn: sqlite3.Connection, entity: str) -> dict[str, Any]:
-    """Every entity connected to this one by links, and all their events in order."""
+    """The document chain this entity belongs to (quote, orders, invoices, bills, payments,
+    mail, bank), the feedback and revisions about it, and all their events in order."""
     _check_entity(entity)
+    marks = ",".join("?" * len(GOVERNANCE_RELS))
     seen = {entity}
     frontier = [entity]
     while frontier:
         nxt = []
         for e in frontier:
             for (src, dst) in conn.execute(
-                "SELECT src, dst FROM doc_links WHERE src = ? OR dst = ?", (e, e)
+                f"SELECT src, dst FROM doc_links WHERE (src = ? OR dst = ?) AND rel NOT IN ({marks})",
+                (e, e, *GOVERNANCE_RELS),
             ):
                 for x in (src, dst):
                     if x not in seen:
                         seen.add(x)
                         nxt.append(x)
         frontier = nxt
+    chain = set(seen)
+    for e in chain:
+        for (src,) in conn.execute(f"SELECT src FROM doc_links WHERE dst = ? AND rel IN ({marks})",
+                                   (e, *GOVERNANCE_RELS)):
+            seen.add(src)
     marks = ",".join("?" * len(seen))
     events = rows(
         conn,
@@ -415,7 +429,7 @@ def trace(conn: sqlite3.Connection, entity: str) -> dict[str, Any]:
         f" payload, sources, links FROM events WHERE entity IN ({marks}) ORDER BY seq",
         sorted(seen),
     )
-    return {"root": entity, "entities": sorted(seen), "events": events}
+    return {"root": entity, "entities": sorted(chain), "governance": sorted(seen - chain), "events": events}
 
 
 def next_id(conn: sqlite3.Connection, entity_type: str, prefix: str, start: int = 1001) -> str:
