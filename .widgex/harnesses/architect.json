@@ -23,7 +23,7 @@
           "kind": "hard",
           "question": "Have you written company_profile.md, policy.json and pipeline.json?",
           "check": {
-            "file": "C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/checks/ledger_checks.py",
+            "file": "checks/ledger_checks.py",
             "function": "architect_profile_written"
           }
         }
@@ -38,7 +38,7 @@
           "kind": "hard",
           "question": "Is every enabled driver compiled, checked with api.harness_check, and recorded?",
           "check": {
-            "file": "C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/checks/ledger_checks.py",
+            "file": "checks/ledger_checks.py",
             "function": "architect_all_validated"
           }
         }

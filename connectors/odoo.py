@@ -162,7 +162,16 @@ def survey(o: Odoo) -> dict:
         "vendor_prices": o.search_read("product.supplierinfo", [],
                                        ["partner_id", "product_tmpl_id", "price", "min_qty", "delay"]),
         "customers": o.search_read("res.partner", [("customer_rank", ">", 0)],
-                                   ["name", "email", "property_payment_term_id", "credit", "vat"]),
+                                   ["name", "email", "property_payment_term_id", "credit", "vat", "comment",
+                                    "property_account_position_id", "property_product_pricelist"]),
+        "fiscal_positions": [{**fp, "tax_map": o.search_read("account.fiscal.position.tax",
+                                                             [("position_id", "=", fp["id"])],
+                                                             ["tax_src_id", "tax_dest_id"])}
+                             for fp in o.search_read("account.fiscal.position", [], ["name", "auto_apply"])],
+        "pricelists": [{**pl, "items": o.search_read("product.pricelist.item", [("pricelist_id", "=", pl["id"])],
+                                                     ["product_tmpl_id", "compute_price", "fixed_price",
+                                                      "percent_price", "min_quantity"])}
+                       for pl in o.search_read("product.pricelist", [], ["name", "currency_id"])],
         "vendors": o.search_read("res.partner", [("supplier_rank", ">", 0)],
                                  ["name", "email", "property_supplier_payment_term_id", "debit"]),
         "bank_accounts": [{"partner": b["partner_id"][1] if b["partner_id"] else None,

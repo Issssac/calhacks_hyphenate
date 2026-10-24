@@ -42,7 +42,9 @@ HARNESS_DIR = ROOT / ".widgex" / "harnesses"
 PROPOSED = ROOT / "workflows" / "proposed"
 HISTORY = ROOT / "workflows" / "history"
 PROMPTS = ROOT / "workflows" / "prompts"
-CHECKS = (ROOT / "checks" / "ledger_checks.py").as_posix()
+# WidgeX resolves check.file relative to the harness file's folder and refuses anything outside
+# it, so the workflows point at a shim in .widgex/harnesses/checks/ that loads checks/ledger_checks.py.
+CHECKS = "checks/ledger_checks.py"
 DRIVERS = ("intake", "orders", "billing", "cash", "reconcile")
 ROLE = {"intake": "intake", "orders": "orders", "billing": "billing", "cash": "cash", "reconcile": "reconcile",
         "architect": "architect"}

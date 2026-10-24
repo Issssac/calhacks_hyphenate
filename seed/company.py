@@ -66,7 +66,12 @@ def run(o: Odoo) -> dict:
         vals = {"name": cu["name"], "email": cu["email"], "is_company": True, "customer_rank": 1,
                 "comment": cu["note"], "property_account_position_id": exempt_fp if cu["exempt"] else False}
         pid = _one(o, "res.partner", [("name", "=", cu["name"])], vals)
-        if cu.get("contract"):
+        if cu.get("contract") and not cu.get("contract_in_odoo", True):
+            # Make sure no earlier seed left the contract in Odoo.
+            for pl in o.search_read("product.pricelist", [("name", "=", f"{cu['name']} contract")], ["id"]):
+                o.write("res.partner", [pid], {"property_product_pricelist": False})
+                o.write("product.pricelist", [pl["id"]], {"active": False})
+        elif cu.get("contract"):
             items = [(5, 0, 0)] + [(0, 0, {"applied_on": "1_product", "product_tmpl_id": products[name],
                                            "compute_price": "fixed", "fixed_price": price})
                                    for name, price in cu["contract"].items()]

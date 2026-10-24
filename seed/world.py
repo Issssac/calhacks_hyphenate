@@ -38,9 +38,11 @@ CUSTOMERS = [
      "note": "resale certificate on file; always sends a PDF quotation"},
     {"name": "Sausalito Yacht Services", "email": "ops@sausalitoyacht.example", "exempt": False,
      "note": "orders by short email"},
+    # Bay Rigging's contract was signed on paper and never loaded into Odoo. Only the controller
+    # knows it, which is exactly the kind of knowledge the desk has to learn from being corrected.
     {"name": "Bay Rigging Co", "email": "buyer@bayrigging.example", "exempt": False,
      "contract": {"Galvanized Shackle 1/2in": 4.50, "Double-Braid Line 1/2in (ft)": 1.70},
-     "note": "annual contract pricing"},
+     "contract_in_odoo": False, "note": "rigging shop"},
     {"name": "Delta Charter Fleet", "email": "ap@deltacharter.example", "exempt": False,
      "note": "pays by ACH, sometimes nets deductions"},
 ]

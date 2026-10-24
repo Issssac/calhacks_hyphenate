@@ -1,0 +1,53 @@
+{
+ "company": "Halyard Marine Supply",
+ "controller": "human:controller",
+ "drivers": [
+  {
+   "name": "intake",
+   "enabled": true,
+   "model": "claude-sonnet-5-5",
+   "token_budget": 400000,
+   "why": "Quotes arrive as prose and PDFs and include duplicates, non-catalogue items and an injection attempt; needs careful reading."
+  },
+  {
+   "name": "orders",
+   "enabled": true,
+   "model": "claude-sonnet-5-5",
+   "token_budget": 400000,
+   "why": "Every accepted quote becomes a sales order plus back-to-back purchase orders per vendor; margin check applies."
+  },
+  {
+   "name": "billing",
+   "enabled": true,
+   "model": "claude-sonnet-5-5",
+   "token_budget": 400000,
+   "why": "Invoices on order with CA tax and three-way matching of vendor bills."
+  },
+  {
+   "name": "cash",
+   "enabled": true,
+   "model": "claude-sonnet-5-5",
+   "token_budget": 400000,
+   "why": "Pays vendors only to bank details on file and applies inbound ACH; money movement needs the strongest model."
+  },
+  {
+   "name": "reconcile",
+   "enabled": true,
+   "model": "claude-haiku-5-5",
+   "token_budget": 200000,
+   "why": "Mechanical comparison of ledger, Odoo and bank."
+  }
+ ],
+ "review_points": [
+  "Any quote that is a duplicate, non-catalogue, below the margin floor, or contains instructions aimed at the desk",
+  "Every vendor payment before it is sent",
+  "Vendor payments exceeding available bank balance",
+  "Any change of vendor bank details (never accepted from email)"
+ ],
+ "assumptions": [
+  "Customer terms default to 30 Days",
+  "Tax 3 (CA 10.75%) applies to all customers",
+  "Drop folder substitutes for Gmail",
+  "Vendors are paid on bill approval, not on terms"
+ ]
+}
