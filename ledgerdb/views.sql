@@ -48,7 +48,7 @@ SELECT e.seq,
        e.kind
 FROM events e, json_each(e.links) j;
 
--- Our own double-entry journal, mirrored from what we post to QBO.
+-- Our own double-entry journal, mirrored from the lines the books actually booked.
 CREATE VIEW journal AS
 SELECT e.seq,
        e.ts,
@@ -102,14 +102,15 @@ WHERE l.rel = 'from_quote'
   AND NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = l.src AND e.kind = 'so.amended'
                   AND e.seq > (SELECT MAX(a.seq) FROM events a WHERE a.entity = l.dst AND a.kind = 'quote.amended'))
 UNION ALL
--- orders: drafted SOs/POs that are approved but not yet posted to QBO
-SELECT 'orders', s.entity, 'approved, needs posting', s.last_seq
+-- orders: drafted SOs/POs that are approved but not yet confirmed in the books
+SELECT CASE s.entity_type WHEN 'billpayment' THEN 'cash' ELSE 'orders' END,
+       s.entity, 'approved, needs posting', s.last_seq
 FROM doc_state s
-WHERE s.entity_type IN ('so', 'po')
+WHERE s.entity_type IN ('so', 'po', 'billpayment')
   AND EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'approval.granted'
               AND e.seq > (SELECT MAX(d.seq) FROM events d WHERE d.entity = s.entity
                            AND (d.kind LIKE '%.drafted' OR d.kind LIKE '%.amended')))
-  AND NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'qbo.posted'
+  AND NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'erp.posted'
                   AND e.seq > (SELECT MAX(d.seq) FROM events d WHERE d.entity = s.entity
                                AND (d.kind LIKE '%.drafted' OR d.kind LIKE '%.amended')))
 UNION ALL
@@ -117,37 +118,43 @@ UNION ALL
 SELECT 'billing', s.entity, 'needs invoice', s.last_seq
 FROM doc_state s
 WHERE s.entity_type = 'so'
-  AND EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'qbo.posted')
+  AND EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'erp.posted')
   AND NOT EXISTS (SELECT 1 FROM doc_links l WHERE l.rel = 'from_so' AND l.dst = s.entity)
 UNION ALL
 -- billing: posted POs with no bill
 SELECT 'billing', s.entity, 'awaiting vendor bill', s.last_seq
 FROM doc_state s
 WHERE s.entity_type = 'po'
-  AND EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'qbo.posted')
+  AND EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'erp.posted')
   AND NOT EXISTS (SELECT 1 FROM doc_links l WHERE l.rel = 'from_po' AND l.dst = s.entity)
 UNION ALL
 -- billing: vendor bills received but not matched and posted
 SELECT 'billing', s.entity, 'needs 3-way match', s.last_seq
 FROM doc_state s
 WHERE s.entity_type = 'bill'
-  AND NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'qbo.posted')
+  AND NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'erp.posted')
 UNION ALL
 -- cash: invoices not fully paid
 SELECT 'cash', s.entity, 'open receivable', s.last_seq
 FROM doc_state s JOIN doc_latest d ON d.entity = s.entity
 LEFT JOIN applied a ON a.target = s.entity
 WHERE s.entity_type = 'invoice'
-  AND EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'qbo.posted')
-  AND COALESCE(a.amount, 0) < ROUND(json_extract(d.payload, '$.total'), 2)
+  AND EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'erp.posted')
+  AND COALESCE(a.amount, 0) < ROUND(COALESCE(
+        (SELECT json_extract(p.payload, '$.amount_total') FROM events p
+         WHERE p.entity = s.entity AND p.kind = 'erp.posted' ORDER BY p.seq DESC LIMIT 1),
+        json_extract(d.payload, '$.total')), 2)
 UNION ALL
 -- cash: bills not fully paid
 SELECT 'cash', s.entity, 'open payable', s.last_seq
 FROM doc_state s JOIN doc_latest d ON d.entity = s.entity
 LEFT JOIN applied a ON a.target = s.entity
 WHERE s.entity_type = 'bill'
-  AND EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'qbo.posted')
-  AND COALESCE(a.amount, 0) < ROUND(json_extract(d.payload, '$.total'), 2)
+  AND EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'erp.posted')
+  AND COALESCE(a.amount, 0) < ROUND(COALESCE(
+        (SELECT json_extract(p.payload, '$.amount_total') FROM events p
+         WHERE p.entity = s.entity AND p.kind = 'erp.posted' ORDER BY p.seq DESC LIMIT 1),
+        json_extract(d.payload, '$.total')), 2)
 UNION ALL
 -- cash: money received that has not been applied to anything
 SELECT 'cash', s.entity, 'unapplied cash', s.last_seq

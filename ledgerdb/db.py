@@ -5,7 +5,7 @@ than in prompts:
 
 * a role may only write the event kinds listed for it in roles.toml;
 * nobody may approve something they created or drafted;
-* nothing is posted to QuickBooks until its posting gate is satisfied.
+* nothing is posted (confirmed) in the books until its posting gate is satisfied.
 
 Rows are hash-chained, so `verify` detects any edit made behind the triggers.
 """
@@ -180,7 +180,7 @@ def is_approved(conn: sqlite3.Connection, entity: str) -> bool:
 
 def is_posted(conn: sqlite3.Connection, entity: str) -> bool:
     return conn.execute(
-        "SELECT 1 FROM events WHERE entity = ? AND kind = 'qbo.posted' LIMIT 1", (entity,)
+        "SELECT 1 FROM events WHERE entity = ? AND kind = 'erp.posted' LIMIT 1", (entity,)
     ).fetchone() is not None
 
 
@@ -227,7 +227,7 @@ def _check_posting(conn: sqlite3.Connection, policy: Policy, entity: str, etype:
 
 def check_post(conn: sqlite3.Connection, entity: str, links: list[dict[str, Any]] | None = None,
                policy: Policy | None = None) -> None:
-    """Raise LedgerError unless `entity` may be posted to QBO right now."""
+    """Raise LedgerError unless `entity` may be posted in the books right now."""
     etype = _check_entity(entity)
     _check_posting(conn, policy or load_policy(), entity, etype, _norm_links(links))
 
@@ -237,21 +237,22 @@ def latest_payload(conn: sqlite3.Connection, entity: str) -> dict[str, Any] | No
     return json.loads(row[0]) if row else None
 
 
-def qbo_ref(conn: sqlite3.Connection, entity: str) -> dict[str, Any] | None:
-    """The QBO object an entity was last posted as: {qbo_type, qbo_id, ...}."""
+def erp_ref(conn: sqlite3.Connection, entity: str, posted_only: bool = False) -> dict[str, Any] | None:
+    """The ERP record an entity was last staged or posted as: {model, id, name, ...}."""
+    kinds = "('erp.posted')" if posted_only else "('erp.staged', 'erp.posted')"
     row = conn.execute(
-        "SELECT payload FROM events WHERE entity = ? AND kind = 'qbo.posted' ORDER BY seq DESC LIMIT 1",
+        f"SELECT payload FROM events WHERE entity = ? AND kind IN {kinds} ORDER BY seq DESC LIMIT 1",
         (entity,),
     ).fetchone()
     return json.loads(row[0]) if row else None
 
 
-def entity_for_qbo(conn: sqlite3.Connection, qbo_type: str, qbo_id: str) -> str | None:
+def entity_for_erp(conn: sqlite3.Connection, model: str, record_id: int | str) -> str | None:
     row = conn.execute(
-        "SELECT entity FROM events WHERE kind = 'qbo.posted'"
-        " AND json_extract(payload, '$.qbo_type') = ? AND json_extract(payload, '$.qbo_id') = ?"
+        "SELECT entity FROM events WHERE kind IN ('erp.staged', 'erp.posted')"
+        " AND json_extract(payload, '$.model') = ? AND CAST(json_extract(payload, '$.id') AS TEXT) = ?"
         " ORDER BY seq DESC LIMIT 1",
-        (qbo_type, str(qbo_id)),
+        (model, str(record_id)),
     ).fetchone()
     return row[0] if row else None
 
@@ -313,7 +314,7 @@ def append(
             raise LedgerError(f"cannot decide on {entity}: it does not exist")
         if actor in _entity_actors(conn, entity):
             raise LedgerError(f"{actor} created or worked on {entity} and may not also approve it")
-    if kind == "qbo.posted":
+    if kind == "erp.posted":
         _check_posting(conn, policy, entity, etype, norm_links)
     if kind == "payment.applied":
         if not any(l["rel"] == "applies_to" and "amount" in l for l in norm_links):

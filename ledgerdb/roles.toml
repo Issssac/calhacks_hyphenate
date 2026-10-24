@@ -1,6 +1,6 @@
 # Which event kinds each role may write. Patterns use shell-style wildcards.
 # This is the code-level half of segregation of duties: an agent running as
-# `intake` cannot approve anything or post to QuickBooks, whatever its prompt says.
+# `intake` cannot approve anything or post to the books, whatever its prompt says.
 
 # Kinds every agent role may write.
 [common]
@@ -16,22 +16,23 @@ kinds = ["quote.received", "quote.extracted", "quote.conflict", "quote.clarified
 
 [roles.orders]
 kinds = ["so.drafted", "so.amended", "so.cancelled", "po.drafted", "po.amended", "po.cancelled",
-         "approval.requested", "qbo.posted", "qbo.failed"]
+         "approval.requested", "erp.staged", "erp.posted", "erp.failed"]
 
 [roles.billing]
-kinds = ["invoice.drafted", "invoice.posted", "bill.received", "bill.matched", "bill.mismatch",
-         "bill.posted", "approval.requested", "qbo.posted", "qbo.failed", "je.posted"]
+kinds = ["invoice.drafted", "bill.received", "bill.matched", "bill.mismatch",
+         "approval.requested", "erp.staged", "erp.posted", "erp.failed", "je.posted"]
 
 [roles.cash]
 kinds = ["payment.received", "payment.applied", "payment.short", "payment.over",
-         "payment.unmatched", "billpayment.posted", "approval.requested", "qbo.posted",
-         "qbo.failed", "qbo.changed", "je.posted"]
+         "payment.unmatched", "billpayment.drafted", "billpayment.sent",
+         "approval.requested", "erp.staged", "erp.posted", "erp.failed", "je.posted"]
 
 [roles.reconcile]
-kinds = ["recon.*", "qbo.changed"]
+kinds = ["recon.*"]
 
+# Pulls what changed in Odoo and at the bank. Writes nothing to either.
 [roles.tracker]
-kinds = ["qbo.changed"]
+kinds = ["erp.changed", "bank.transaction"]
 
 # The controller is a person (or a model playing the approver). Approvals must
 # be written with --on-behalf-of human:<name>, and are refused if that actor
@@ -44,15 +45,15 @@ human = true
 [roles.simulator]
 kinds = ["sim.*"]
 
-# What must already be true before an entity type may be posted to QBO.
-#   approved               an approval.granted after its latest draft/amend
-#   parent_approved:<rel>  the entity it links to via <rel> is approved
+# What must already be true before an entity type may be posted (confirmed) in the books.
+#   approved                   an approval.granted after its latest draft/amend
+#   parent_approved:<rel>      the entity it links to via <rel> is approved
 #   matched_or_approved:<rel>  a bill.matched or approval.granted on it, and its parent is posted
-#   none                   no gate
+#   none                       no gate
 [posting]
 so = "approved"
 po = "approved"
 invoice = "parent_approved:from_so"
 bill = "matched_or_approved:from_po"
 payment = "none"
-billpayment = "none"
+billpayment = "approved"   # whoever requests a payment can't be the one who approves it

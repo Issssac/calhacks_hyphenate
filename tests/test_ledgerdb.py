@@ -27,8 +27,8 @@ def quote_to_posted_so(conn):
         payload={"total": 100}, links=[{"rel": "from_quote", "to": "quote:Q-1"}])
     add(conn, actor="orders-1", role="controller", kind="approval.granted", entity="so:SO-1001",
         on_behalf_of="human:andy")
-    add(conn, actor="orders-1", role="orders", kind="qbo.posted", entity="so:SO-1001",
-        payload={"qbo_type": "Estimate", "qbo_id": "42"})
+    add(conn, actor="orders-1", role="orders", kind="erp.posted", entity="so:SO-1001",
+        payload={"model": "sale.order", "id": 42})
 
 
 def test_append_and_chain(conn):
@@ -61,7 +61,7 @@ def test_verify_detects_tamper(conn):
 
 def test_role_cannot_write_other_kinds(conn):
     with pytest.raises(db.LedgerError, match="may not write"):
-        add(conn, actor="intake-1", role="intake", kind="qbo.posted", entity="so:SO-1")
+        add(conn, actor="intake-1", role="intake", kind="erp.posted", entity="so:SO-1")
     with pytest.raises(db.LedgerError, match="may not write"):
         add(conn, actor="intake-1", role="intake", kind="approval.granted", entity="quote:Q-1")
 
@@ -86,12 +86,12 @@ def test_no_self_approval(conn):
 def test_posting_needs_approval_after_latest_draft(conn):
     add(conn, actor="orders-1", role="orders", kind="so.drafted", entity="so:SO-1001")
     with pytest.raises(db.LedgerError, match="no approval"):
-        add(conn, actor="orders-1", role="orders", kind="qbo.posted", entity="so:SO-1001")
+        add(conn, actor="orders-1", role="orders", kind="erp.posted", entity="so:SO-1001")
     add(conn, actor="orders-1", role="controller", kind="approval.granted", entity="so:SO-1001",
         on_behalf_of="human:andy")
     add(conn, actor="orders-1", role="orders", kind="so.amended", entity="so:SO-1001")
     with pytest.raises(db.LedgerError, match="no approval"):
-        add(conn, actor="orders-1", role="orders", kind="qbo.posted", entity="so:SO-1001")
+        add(conn, actor="orders-1", role="orders", kind="erp.posted", entity="so:SO-1001")
 
 
 def test_rejection_blocks_posting(conn):
@@ -108,20 +108,20 @@ def test_invoice_needs_approved_parent(conn):
     add(conn, actor="billing-1", role="billing", kind="invoice.drafted", entity="invoice:INV-1",
         links=[{"rel": "from_so", "to": "so:SO-1001"}])
     with pytest.raises(db.LedgerError, match="not approved"):
-        add(conn, actor="billing-1", role="billing", kind="qbo.posted", entity="invoice:INV-1")
+        add(conn, actor="billing-1", role="billing", kind="erp.posted", entity="invoice:INV-1")
 
 
 def test_bill_needs_match_or_approval(conn):
     add(conn, actor="orders-1", role="orders", kind="po.drafted", entity="po:PO-1")
     add(conn, actor="orders-1", role="controller", kind="approval.granted", entity="po:PO-1",
         on_behalf_of="human:andy")
-    add(conn, actor="orders-1", role="orders", kind="qbo.posted", entity="po:PO-1")
+    add(conn, actor="orders-1", role="orders", kind="erp.posted", entity="po:PO-1")
     add(conn, actor="billing-1", role="billing", kind="bill.received", entity="bill:B-1",
         payload={"total": 50}, links=[{"rel": "from_po", "to": "po:PO-1"}])
     with pytest.raises(db.LedgerError, match="no 3-way match"):
-        add(conn, actor="billing-1", role="billing", kind="qbo.posted", entity="bill:B-1")
+        add(conn, actor="billing-1", role="billing", kind="erp.posted", entity="bill:B-1")
     add(conn, actor="billing-1", role="billing", kind="bill.matched", entity="bill:B-1")
-    add(conn, actor="billing-1", role="billing", kind="qbo.posted", entity="bill:B-1")
+    add(conn, actor="billing-1", role="billing", kind="erp.posted", entity="bill:B-1")
 
 
 def test_unbalanced_journal_refused(conn):
@@ -147,11 +147,11 @@ def test_queues_follow_the_flow(conn):
     add(conn, actor="orders-1", role="controller", kind="approval.granted", entity="so:SO-1001",
         on_behalf_of="human:andy")
     assert q("orders") == ["so:SO-1001"]
-    add(conn, actor="orders-1", role="orders", kind="qbo.posted", entity="so:SO-1001")
+    add(conn, actor="orders-1", role="orders", kind="erp.posted", entity="so:SO-1001")
     assert q("orders") == [] and q("billing") == ["so:SO-1001"]
-    add(conn, actor="billing-1", role="billing", kind="invoice.posted", entity="invoice:INV-1",
+    add(conn, actor="billing-1", role="billing", kind="invoice.drafted", entity="invoice:INV-1",
         payload={"total": 100}, links=[{"rel": "from_so", "to": "so:SO-1001"}])
-    add(conn, actor="billing-1", role="billing", kind="qbo.posted", entity="invoice:INV-1")
+    add(conn, actor="billing-1", role="billing", kind="erp.posted", entity="invoice:INV-1")
     assert q("billing") == [] and q("cash") == ["invoice:INV-1"]
     add(conn, actor="cash-1", role="cash", kind="payment.applied", entity="payment:P-1",
         links=[{"rel": "applies_to", "to": "invoice:INV-1", "amount": 60}])
@@ -191,7 +191,7 @@ def test_cli_roundtrip(tmp_path, capsys):
                      "--payload", '{"subject":"Quote"}', "--source", "gmail:abc"]) == 0
     capsys.readouterr()
     assert cli_main(["--db", path, "append", "--actor", "intake-1", "--role", "intake",
-                     "--kind", "qbo.posted", "--entity", "so:SO-1"]) == 2
+                     "--kind", "erp.posted", "--entity", "so:SO-1"]) == 2
     assert "may not write" in json.loads(capsys.readouterr().out)["error"]
     assert cli_main(["--db", path, "queue", "intake"]) == 0
     assert json.loads(capsys.readouterr().out)[0]["entity"] == "quote:Q-1"

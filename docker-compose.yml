@@ -1,0 +1,39 @@
+# Local Odoo 18 for the revenue desk. Only reachable from this machine.
+#
+#   docker compose up -d db
+#   docker compose run --rm odoo odoo -d revenue -i sale_management,purchase,stock,account --stop-after-init
+#   docker compose up -d odoo          # then http://localhost:8069  (admin / admin)
+#
+# Or just: python -m connectors.odoo bootstrap
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo
+    volumes:
+      - odoo-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo"]
+      interval: 3s
+      retries: 20
+
+  odoo:
+    image: odoo:18.0
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      HOST: db
+      USER: odoo
+      PASSWORD: odoo
+    ports:
+      - "127.0.0.1:8069:8069"
+    volumes:
+      - odoo-data:/var/lib/odoo
+
+volumes:
+  odoo-db:
+  odoo-data:
