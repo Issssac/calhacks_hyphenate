@@ -78,8 +78,31 @@ GROUP BY dst;
 
 -- Each driver's work queue. A driver drains its queue and stops.
 CREATE VIEW open_items AS
+-- intake: mail pulled from the inbox that nobody has classified yet
+SELECT 'intake' AS queue, s.entity, 'needs classification' AS reason, s.last_seq AS since_seq
+FROM doc_state s
+WHERE s.entity_type = 'mail'
+  AND NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'mail.classified')
+UNION ALL
+-- billing: mail classified as a vendor bill that has not been recorded as a bill
+SELECT 'billing', s.entity, 'vendor bill to record', s.last_seq
+FROM doc_state s
+WHERE s.entity_type = 'mail'
+  AND EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'mail.classified'
+              AND json_extract(e.payload, '$.class') = 'vendor_bill')
+  AND NOT EXISTS (SELECT 1 FROM doc_links l WHERE l.rel = 'from_mail' AND l.dst = s.entity
+                  AND l.src LIKE 'bill:%')
+UNION ALL
+-- cash: money that arrived at the bank and has not been turned into a payment yet
+SELECT 'cash', s.entity, 'bank receipt to match', s.last_seq
+FROM doc_state s
+WHERE s.entity_type = 'banktxn'
+  AND EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'bank.transaction'
+              AND json_extract(e.payload, '$.direction') = 'in')
+  AND NOT EXISTS (SELECT 1 FROM doc_links l WHERE l.rel = 'from_bank' AND l.dst = s.entity)
+UNION ALL
 -- intake: quotes received but not yet extracted
-SELECT 'intake' AS queue, s.entity, 'needs extraction' AS reason, s.last_seq AS since_seq
+SELECT 'intake', s.entity, 'needs extraction', s.last_seq
 FROM doc_state s
 WHERE s.entity_type = 'quote'
   AND NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity

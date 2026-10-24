@@ -11,7 +11,8 @@ kinds = ["feedback.recorded", "check.result", "workflow.proposed", "workflow.val
 kinds = ["structure.*"]
 
 [roles.intake]
-kinds = ["quote.received", "quote.extracted", "quote.conflict", "quote.clarified",
+kinds = ["mail.received", "mail.classified",
+         "quote.received", "quote.extracted", "quote.conflict", "quote.clarified",
          "quote.amended", "quote.rejected", "quote.duplicate", "approval.requested"]
 
 [roles.orders]
