@@ -11,3 +11,6 @@ inbox/raw/
 .env
 *.token.json
 client_secret*.json
+
+# per-machine sandbox ids
+structure/bank.json
