@@ -1,0 +1,58 @@
+# Which event kinds each role may write. Patterns use shell-style wildcards.
+# This is the code-level half of segregation of duties: an agent running as
+# `intake` cannot approve anything or post to QuickBooks, whatever its prompt says.
+
+# Kinds every agent role may write.
+[common]
+kinds = ["feedback.recorded", "check.result", "workflow.proposed", "workflow.validated",
+         "workflow.adopted", "workflow.rejected", "note.*"]
+
+[roles.architect]
+kinds = ["structure.*"]
+
+[roles.intake]
+kinds = ["quote.received", "quote.extracted", "quote.conflict", "quote.clarified",
+         "quote.amended", "quote.rejected", "quote.duplicate", "approval.requested"]
+
+[roles.orders]
+kinds = ["so.drafted", "so.amended", "so.cancelled", "po.drafted", "po.amended", "po.cancelled",
+         "approval.requested", "qbo.posted", "qbo.failed"]
+
+[roles.billing]
+kinds = ["invoice.drafted", "invoice.posted", "bill.received", "bill.matched", "bill.mismatch",
+         "bill.posted", "approval.requested", "qbo.posted", "qbo.failed", "je.posted"]
+
+[roles.cash]
+kinds = ["payment.received", "payment.applied", "payment.short", "payment.over",
+         "payment.unmatched", "billpayment.posted", "approval.requested", "qbo.posted",
+         "qbo.failed", "qbo.changed", "je.posted"]
+
+[roles.reconcile]
+kinds = ["recon.*", "qbo.changed"]
+
+[roles.tracker]
+kinds = ["qbo.changed"]
+
+# The controller is a person (or a model playing the approver). Approvals must
+# be written with --on-behalf-of human:<name>, and are refused if that actor
+# created or drafted the thing being approved.
+[roles.controller]
+kinds = ["approval.granted", "approval.rejected", "feedback.recorded"]
+human = true
+
+# Seed and simulation scripts. Everything they write is labelled simulated.
+[roles.simulator]
+kinds = ["sim.*"]
+
+# What must already be true before an entity type may be posted to QBO.
+#   approved               an approval.granted after its latest draft/amend
+#   parent_approved:<rel>  the entity it links to via <rel> is approved
+#   matched_or_approved:<rel>  a bill.matched or approval.granted on it, and its parent is posted
+#   none                   no gate
+[posting]
+so = "approved"
+po = "approved"
+invoice = "parent_approved:from_so"
+bill = "matched_or_approved:from_po"
+payment = "none"
+billpayment = "none"

@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# the live ledger and anything pulled from real inboxes
+data/
+inbox/raw/
+
+# secrets
+.env
+*.token.json
+client_secret*.json
