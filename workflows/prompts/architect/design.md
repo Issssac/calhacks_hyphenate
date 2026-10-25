@@ -36,5 +36,21 @@ Write three files:
  "assumptions": ["..."]}
 ```
 
-Disable a driver only when this company truly has no such step, and say why. Record a
-`structure.design` event summarising the three files.
+Disable a driver only when this company truly has no such step, and say why.
+
+**Does this company set its own prices?** If customers send requests for quote (part numbers and quantities, no
+prices) rather than accepting prices, add the `pricing` driver:
+`{"name": "pricing", "enabled": true, "model": "claude-sonnet-5-5", "token_budget": 1500000, "why": "..."}`. It judges each
+customer, runs the pricing model (`pricing/model.py`) on the company's quote history, and emails finance a
+recommendation before any quote goes out. It needs, and you should check for:
+- a **quote history** export at `<desk home>/pricing/history.csv` (past quotes, prices, won or lost). Note how
+  many rows and how many years; without one the model has nothing to learn from, so say so;
+- **who in finance approves prices**: `policy.json` `"finance_approvers": ["<email>"]`, and
+  `"pricing": {"margin_floor": ..., "quote_cost": ..., "valid_days": 30}`;
+- **suppliers per part**: several vendors with quantity price breaks and lead times in `product.supplierinfo`
+  (the survey's `vendor_prices`), and which vendors are authorized sources and which are brokers (their notes:
+  `python -m connectors.odoo read res.partner '[["supplier_rank",">",0]]' name comment`).
+
+Put the pricing review point ("finance approves every price before it is quoted") in `review_points`.
+
+Record a `structure.design` event summarising the three files.
