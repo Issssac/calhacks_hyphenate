@@ -199,6 +199,15 @@ def gate(c) -> None:
     try:
         db.append(t, actor="orders-agent", role="controller", on_behalf_of="orders-agent", kind="approval.granted",
                   entity="so:SO-DEMO")
+    except db.LedgerError:
+        say("   REFUSED:  an approval has to come from the controller, not from the agent that drafted it.", indent=4)
+    say("   And a controller who drafted something can't approve it either:", indent=4)
+    db.append(t, actor="human:sam", role="orders", kind="so.amended", entity="so:SO-DEMO",
+              payload={"customer": "Bay Rigging Co", "total": 1800.0,
+                       "lines": [{"item": "Galvanized Shackle 1/2in", "qty": 400, "unit_price": 4.5}]})
+    try:
+        db.append(t, actor="orders-agent", role="controller", on_behalf_of="human:sam", kind="approval.granted",
+                  entity="so:SO-DEMO")
     except db.LedgerError as e:
         say(f"   REFUSED:  {e}", indent=4)
     del os.environ["LEDGER_DB"]
