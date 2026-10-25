@@ -693,8 +693,20 @@ def _pricing_reason(conn) -> tuple[str | None, str | None]:
 def pricing_focus_is_rfq(*_a: Any, **_k: Any) -> bool:
     conn = _conn()
     f, r = _pricing_reason(conn)
-    return _record(conn, "pricing_focus_is_rfq", r in ("needs pricing", "finance rejected, re-price"),
-                   {"focus": f, "reason": r})
+    ok = r in ("needs pricing", "finance rejected, re-price")
+    detail = {"focus": f, "reason": r}
+    if ok and r == "finance rejected, re-price":
+        # Learn before re-pricing: finance's correction must be recorded as feedback (the overruled state), so the
+        # workflow gets the chance to change. Re-pricing straight away repeats the same mistake.
+        rej = _latest_seq(conn, f, "approval.rejected")
+        fb = conn.execute("SELECT 1 FROM events e WHERE e.kind = 'feedback.recorded' AND e.seq > ? AND EXISTS "
+                          "(SELECT 1 FROM doc_links l WHERE l.seq = e.seq AND l.rel = 'about' AND l.dst = ?)",
+                          (rej, f)).fetchone()
+        if not fb:
+            ok = False
+            detail["problem"] = ("finance rejected this: take the overruled path first (record feedback.recorded "
+                                 "--link about=<rfq>), then re-price")
+    return _record(conn, "pricing_focus_is_rfq", ok, detail)
 
 
 def pricing_focus_is_approved(*_a: Any, **_k: Any) -> bool:
