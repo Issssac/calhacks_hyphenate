@@ -589,8 +589,10 @@ def track(conn, o: Odoo, ctx: dict, since: str | None = None) -> dict:
             db.append(conn, kind="erp.changed", entity=entity, sources=[f"odoo:{model}/{rec['id']}"],
                       payload={"model": model, **rec}, **ctx)
             n += 1
-    db.append(conn, kind="erp.changed", entity="tracker:odoo",
-              payload={"cursor": started, "since": since, "changes": n}, **ctx)
+    # An empty poll leaves the cursor where it was, so the ledger only records polls that found something.
+    if n:
+        db.append(conn, kind="erp.changed", entity="tracker:odoo",
+                  payload={"cursor": started, "since": since, "changes": n}, **ctx)
     return {"since": since, "changes": n}
 
 

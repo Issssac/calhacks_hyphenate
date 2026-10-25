@@ -69,7 +69,8 @@ def connect(path: Path | str | None = None, readonly: bool = False) -> sqlite3.C
 
 def init(conn: sqlite3.Connection) -> None:
     conn.executescript((PKG_DIR / "schema.sql").read_text(encoding="utf-8"))
-    conn.executescript((PKG_DIR / "views.sql").read_text(encoding="utf-8"))
+    # One transaction, so a concurrent reader never sees a view dropped but not yet recreated.
+    conn.executescript("BEGIN IMMEDIATE;\n" + (PKG_DIR / "views.sql").read_text(encoding="utf-8") + "\nCOMMIT;")
 
 
 # ---------------------------------------------------------------- roles
