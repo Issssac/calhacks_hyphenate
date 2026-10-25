@@ -228,7 +228,55 @@ def _awaiting(driver: str, state: str) -> Callable[..., bool]:
     return check
 
 
+def decision_unacted(conn, request: tuple[int, str, dict], workflow: str) -> tuple[str, dict] | None:
+    """The decision on a request, if the requesting workflow hasn't acted on it since."""
+    seq, entity, _ = request
+    dec = conn.execute("SELECT seq, kind, payload FROM events WHERE entity = ? AND seq > ? AND kind IN"
+                       " ('approval.granted', 'approval.rejected') ORDER BY seq DESC LIMIT 1", (entity, seq)).fetchone()
+    if not dec:
+        return None
+    acted = conn.execute(
+        "SELECT 1 FROM events WHERE seq > ? AND workflow = ? AND kind NOT LIKE 'approval.%'"
+        " AND kind NOT IN ('check.result', 'note.focus', 'erp.changed', 'note.dispatch')"
+        " AND (entity = ? OR seq IN (SELECT seq FROM doc_links WHERE dst = ?)) LIMIT 1",
+        (dec[0], workflow, entity, entity)).fetchone()
+    return None if acted else (dec[1], json.loads(dec[2]))
+
+
+def _decided(driver: str, state: str, word: str) -> Callable[..., bool]:
+    want = "approval.granted" if word == "approved" else "approval.rejected"
+
+    def check(*_a: Any, **_k: Any) -> bool:
+        conn = _conn()
+        req = latest_request(conn, driver, state)
+        dec = decision_unacted(conn, req, driver) if req else None
+        ok = bool(dec) and dec[0] == want
+        if ok:
+            # Point the agent at the item: the transition is about to be taken.
+            try:
+                db.append(conn, actor=f"check:{check.__name__}", role="checker", kind="note.focus",
+                          entity=f"focus:{driver}", payload={"entity": req[1], "via": "decision"}, workflow=driver)
+            except Exception:
+                pass
+        return _record(conn, check.__name__, ok, {"request": req and {"seq": req[0], "entity": req[1]},
+                                                  "decision": dec and dec[0]})
+    check.__name__ = f"{driver}_decided_{state}_{word}"
+    return check
+
+
+def controller_nothing_open(*_a: Any, **_k: Any) -> bool:
+    conn = _conn()
+    open_reqs = [ent for ent, seq in conn.execute(
+        "SELECT entity, MAX(seq) FROM events WHERE kind = 'approval.requested' GROUP BY entity")
+        if decision_after(conn, ent, seq) is None]
+    return _record(conn, "controller_nothing_open", not open_reqs, {"open_requests": open_reqs[:10]})
+
+
 for _d in DRIVERS:
+    for _st in REVIEW_STATES[_d]:
+        for _w in ("approved", "rejected"):
+            _fn = _decided(_d, _st, _w)
+            globals()[_fn.__name__] = _fn
     for _factory in (_queue_empty, _focus_set, _has_feedback, _feedback_closed, _proposal_valid):
         _fn = _factory(_d)
         globals()[_fn.__name__] = _fn

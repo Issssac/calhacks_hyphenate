@@ -52,5 +52,8 @@
  ],
  "approvals": "ledger",
  "approvals_why": "Benchmark mode: a stand-in controller (bench/controller.py) answers from the answer key through the ledger.",
- "budget_why": "A run handles many items; 300k was exhausted mid-queue (billable tokens include cache reads)."
+ "budget_why": "A run handles many items; 300k was exhausted mid-queue (billable tokens include cache reads).",
+ "wake": "hooks",
+ "dispatcher": "widgex-hooks",
+ "wake_why": "Workflows run only when the inbox forwarder (desk/forwarder.py) fires their WidgeX hook; no agent polls."
 }

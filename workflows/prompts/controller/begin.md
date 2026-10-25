@@ -15,7 +15,9 @@ Each pass:
    but never change the decision. A rejection's note is what the desk learns from, so keep its
    facts exact.
 3. If a request has no scenario (`scenario: null`), the key's default applies. Decide it the same way.
-4. Wait 60 seconds (`await asyncio.sleep(60)`), then answer the question. If anything is still open
-   or the desk is busy, the answer is no, and you'll do another pass.
+4. Answer the question. If it asks whether you have decided every open request, check `pending` is empty
+   and answer; your run ends, and the forwarder starts you again when a new request arrives. If it asks
+   whether the whole desk is idle (polling mode), wait 60 seconds first (`await asyncio.sleep(60)`);
+   while anything is open or the desk is busy, the answer is no and you'll do another pass.
 
 You never draft, post or pay anything. You only decide.

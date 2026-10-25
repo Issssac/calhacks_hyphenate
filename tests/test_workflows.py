@@ -259,3 +259,30 @@ def test_manifest_catches_edited_control_code(conn, tmp_path, monkeypatch):
     f.write_text("def check(): return True  # quietly loosened")
     assert manifest.changes(conn) == [{"file": "ledger_checks.py", "problem": "changed since the manifest was recorded"}]
     assert any("control file ledger_checks.py" in p for p in build.manifest_problems(conn))
+
+
+def test_hooks_mode_has_no_idle_loop_and_weakens_nothing():
+    for d in build.DRIVERS:
+        poll, hooks = build.template(d, "ledger", "poll"), build.template(d, "ledger", "hooks")
+        assert "wait" not in hooks["states"]
+        assert hooks["harness"]["triggers"][0]["id"] == build.HOOK_IDS[d]
+        assert build.structural_problems(hooks) == [], d
+        assert build.weakened(poll, hooks, d) == [], d  # switching to hooks removes no control
+        # every review point can end the run instead of polling
+        for name, st in hooks["states"].items():
+            if any("_decision_approved" in (t.get("check") or {}).get("function", "") for t in st["transitions"]):
+                assert any(t["to"] == "done" and t["kind"] == "soft" for t in st["transitions"])
+
+
+def test_woken_driver_goes_to_the_decision(conn):
+    db.append(conn, kind="so.drafted", entity="so:SO-1", payload={"total": 1}, **ORD)
+    db.append(conn, kind="approval.requested", entity="so:SO-1", payload={"review_state": "controller_review"}, **ORD)
+    assert not lc.orders_decided_controller_review_approved()
+    db.append(conn, actor="controller-agent", role="controller", on_behalf_of="model:controller",
+              kind="approval.granted", entity="so:SO-1", payload={"note": "ok"})
+    assert lc.orders_decided_controller_review_approved()
+    assert not lc.orders_decided_controller_review_rejected()
+    # once orders acts on it (posts), it no longer counts as new
+    db.append(conn, kind="erp.posted", entity="so:SO-1", payload={"model": "sale.order", "id": 1}, **ORD)
+    assert not lc.orders_decided_controller_review_approved()
+    assert lc.controller_nothing_open()
