@@ -6,35 +6,35 @@
    "name": "intake",
    "enabled": true,
    "model": "claude-sonnet-5-5",
-   "token_budget": 400000,
+   "token_budget": 1500000,
    "why": "Quotes arrive as prose and PDFs and include duplicates, non-catalogue items and an injection attempt; needs careful reading."
   },
   {
    "name": "orders",
    "enabled": true,
    "model": "claude-sonnet-5-5",
-   "token_budget": 400000,
+   "token_budget": 1500000,
    "why": "Every accepted quote becomes a sales order plus back-to-back purchase orders per vendor; margin check applies."
   },
   {
    "name": "billing",
    "enabled": true,
    "model": "claude-sonnet-5-5",
-   "token_budget": 400000,
+   "token_budget": 1500000,
    "why": "Invoices on order with CA tax and three-way matching of vendor bills."
   },
   {
    "name": "cash",
    "enabled": true,
    "model": "claude-sonnet-5-5",
-   "token_budget": 400000,
+   "token_budget": 1500000,
    "why": "Pays vendors only to bank details on file and applies inbound ACH; money movement needs the strongest model."
   },
   {
    "name": "reconcile",
    "enabled": true,
    "model": "claude-haiku-5-5",
-   "token_budget": 200000,
+   "token_budget": 800000,
    "why": "Mechanical comparison of ledger, Odoo and bank."
   }
  ],
@@ -51,5 +51,6 @@
   "Vendors are paid on bill approval, not on terms"
  ],
  "approvals": "ledger",
- "approvals_why": "Benchmark mode: a stand-in controller (bench/controller.py) answers from the answer key through the ledger."
+ "approvals_why": "Benchmark mode: a stand-in controller (bench/controller.py) answers from the answer key through the ledger.",
+ "budget_why": "A run handles many items; 300k was exhausted mid-queue (billable tokens include cache reads)."
 }

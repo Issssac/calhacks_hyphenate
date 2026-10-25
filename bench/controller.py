@@ -21,7 +21,7 @@ import sys
 
 from ledgerdb import db
 from seed import world
-from seed.scenarios import BY_ID
+from seed.scenarios import BY_ID, effective_expect
 from seed.sim import load as load_sim, scenario_of
 
 CONTROLLER = "model:controller"
@@ -61,7 +61,14 @@ def suggest(conn, entity: str, workflow: str, req: dict) -> dict:
     state = req.get("review_state", "")
     sid = scenario_of(conn, entity, load_sim())
     s = BY_ID.get(sid) or {}
-    exp = s.get("expect", {})
+    quote = None
+    if entity.startswith("so:"):
+        quote = (db.links_of(conn, entity, "from_quote") or [None])[0]
+    elif entity.startswith("quote:"):
+        quote = entity
+    amended = bool(quote) and conn.execute(
+        "SELECT 1 FROM events WHERE entity = ? AND kind = 'quote.amended'", (quote,)).fetchone() is not None
+    exp = effective_expect(s, amended)
     items = [i for i in req.get("items", []) if isinstance(i, str) and i != entity]
     base = {"scenario": sid, "scenario_title": s.get("title"), "also": items}
 

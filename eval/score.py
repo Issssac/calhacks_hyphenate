@@ -17,7 +17,7 @@ from collections import Counter
 from pathlib import Path
 
 from ledgerdb import db
-from seed.scenarios import SCENARIOS
+from seed.scenarios import SCENARIOS, effective_expect
 from seed.sim import load as load_sim
 
 PASS, FAIL, PENDING = "pass", "fail", "pending"
@@ -95,6 +95,7 @@ def score_scenario(conn, s: dict, sim: dict) -> dict:
             ok = any(k in qkinds for k in ("quote.extracted", "quote.clarified"))
             add("intake: extracted", PASS if ok else PENDING, ", ".join(qkinds))
 
+    exp = effective_expect(s, "quote.amended" in qkinds)
     so = (_children(conn, quote, "from_quote", "so") or [None])[-1] if quote else None
     if exp.get("so"):
         if not so:
@@ -116,9 +117,15 @@ def score_scenario(conn, s: dict, sim: dict) -> dict:
         add("controller overrule recorded", PASS if rejected else PENDING, so)
     if exp.get("workflow_revised"):
         d = exp["workflow_revised"]
-        adopted = db.rows(conn, "SELECT version FROM workflow_current WHERE entity = ?", [f"workflow:{d}"])
-        v = adopted[0]["version"] if adopted else 0
-        add(f"{d} workflow revised and adopted", PASS if v and v >= 2 else PENDING, f"live version {v}")
+        # A revision counts only if it was adopted in answer to feedback about this scenario's documents.
+        about = {r["dst"] for r in db.rows(conn, "SELECT dst FROM doc_links WHERE rel = 'about'")}
+        fb = [r["src"] for r in db.rows(conn, "SELECT src, dst FROM doc_links WHERE rel = 'about'")
+              if r["dst"] in {so, quote}]
+        adopted = [r for r in db.rows(conn, "SELECT l.src, l.dst, l.seq FROM doc_links l WHERE l.rel = 'addresses'"
+                                            " AND l.kind = 'workflow.adopted'") if r["dst"] in fb]
+        add(f"{d} workflow revised and adopted after the correction", PASS if adopted else PENDING,
+            f"{len(fb)} feedback item(s), {len(adopted)} adopted revision(s)")
+        del about
     if exp.get("caught_without_controller") and so:
         ks = _kinds(conn, so)
         first_draft = (db.rows(conn, "SELECT payload FROM events WHERE entity = ? AND kind = 'so.drafted' ORDER BY seq LIMIT 1",

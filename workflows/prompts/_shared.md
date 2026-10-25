@@ -70,5 +70,8 @@ reviewer's note in the payload. The ledger refuses an approval from anyone who d
 - End every turn with the transition block the harness asks for. Answer honestly. Many answers
   are also checked by code against the ledger, so a "yes" that isn't true just leaves you where you are.
 - If you are blocked by something only a person can fix (a connector down, missing credentials),
-  record a `note.blocked` event and call `api.session_rest(reason="...")`.
+  record a `note.blocked` event and call `api.session_rest(reason="...")`. **Never rest because your
+  queue is empty or only holds items waiting on someone else.** Other desks will hand you work.
+  An empty queue is what the `wait` state is for, and the workflow stops you by itself once the
+  whole desk is idle.
 - Do one item at a time: focus, finish, and go back to `begin`.

@@ -33,9 +33,14 @@ SCENARIOS = [
         "world": {"pay": {"kind": "exact", "addenda": "P39-0912"}},
         "expect": {"intake": "extracted",
                    "so": [("Galvanized Shackle 1/2in", 300, 5.00), ("Stainless Shackle 3/8in", 150, 7.25),
-                          ("Bronze Thru-Hull 1in", 30, 38.00)],  # after the S06 amendment
+                          ("Bronze Thru-Hull 1in", 20, 38.00)],
+                   "so_after_amendment": [("Galvanized Shackle 1/2in", 300, 5.00), ("Stainless Shackle 3/8in", 150, 7.25),
+                                          ("Bronze Thru-Hull 1in", 30, 38.00)],  # once S06 has amended it
                    "pos": {"Harbor Forge": [("Galvanized Shackle 1/2in", 300, 3.10),
-                                            ("Stainless Shackle 3/8in", 150, 4.80), ("Bronze Thru-Hull 1in", 30, 24.50)]},
+                                            ("Stainless Shackle 3/8in", 150, 4.80), ("Bronze Thru-Hull 1in", 20, 24.50)]},
+                   "pos_after_amendment": {"Harbor Forge": [("Galvanized Shackle 1/2in", 300, 3.10),
+                                                            ("Stainless Shackle 3/8in", 150, 4.80),
+                                                            ("Bronze Thru-Hull 1in", 30, 24.50)]},
                    "taxed": False, "bill": "matched", "paid": "exact"},
     },
     {
@@ -126,3 +131,13 @@ SCENARIOS = [
 ]
 
 BY_ID = {s["id"]: s for s in SCENARIOS}
+
+
+def effective_expect(s: dict, amended: bool) -> dict:
+    """The answer key as it applies now: once a quote has been amended, its after-amendment values."""
+    exp = dict(s.get("expect", {}))
+    if amended:
+        for key in ("so", "pos"):
+            if f"{key}_after_amendment" in exp:
+                exp[key] = exp[f"{key}_after_amendment"]
+    return exp

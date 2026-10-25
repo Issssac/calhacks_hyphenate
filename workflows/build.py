@@ -190,7 +190,7 @@ def template(driver: str, mode: str = "human") -> dict:
                 _feedback_edge(d),
                 hard("post", 10, "Is your focus an order that is already approved and only needs confirming in Odoo?",
                      "orders_focus_is_approved"),
-                hard("draft", 20, "Is your focus a quote that needs a sales order (new or amended)?",
+                hard("draft", 20, "Is your focus a quote that needs a sales order (new or amended), or an SO still waiting to be checked and sent for approval?",
                      "orders_focus_is_quote"),
                 hard("wait", 30, "Is the orders queue empty?", "orders_queue_empty")]},
             "draft": {"transitions": [
