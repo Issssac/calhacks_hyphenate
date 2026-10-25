@@ -1,0 +1,34 @@
+{
+ "company": "Redwood Micro Components",
+ "controller": "human:controller",
+ "drivers": [
+  {"name": "intake", "enabled": true, "model": "claude-sonnet-5-5", "token_budget": 1500000,
+   "why": "RFQs arrive as prose, PDFs and CSV BOMs; replies carry POs, declines, amendments and finance decisions."},
+  {"name": "pricing", "enabled": true, "model": "claude-sonnet-5-5", "token_budget": 1500000,
+   "why": "Customers ask us for prices: judge each customer with evidence, run the model, email finance, then quote."},
+  {"name": "orders", "enabled": true, "model": "claude-sonnet-5-5", "token_budget": 1500000,
+   "why": "A customer PO becomes an SO at the approved quoted price, with POs from the sourcing rule's suppliers."},
+  {"name": "billing", "enabled": true, "model": "claude-sonnet-5-5", "token_budget": 1500000,
+   "why": "Invoices with CA tax or the two fiscal positions; 3-way match of supplier bills."},
+  {"name": "cash", "enabled": true, "model": "claude-sonnet-5-5", "token_budget": 1500000,
+   "why": "Pays suppliers only to bank details on file; applies inbound ACH."},
+  {"name": "reconcile", "enabled": true, "model": "claude-haiku-5-5", "token_budget": 800000,
+   "why": "Mechanical comparison of ledger, Odoo and bank."}
+ ],
+ "review_points": [
+  "Finance approves every price before it is quoted to a customer (by replying to the report email)",
+  "The controller approves every sales order and its purchase orders",
+  "Any broker-sourced part (not an authorized source)",
+  "Every supplier payment before it is sent"
+ ],
+ "assumptions": [
+  "Quote history is simulated (seed/redwood_history.py), labelled source=simulated",
+  "Drop folder and outbox substitute for Gmail",
+  "Suppliers are paid on bill approval"
+ ],
+ "approvals": "ledger",
+ "approvals_why": "Benchmark mode: a stand-in controller (bench/controller.py) and a stand-in finance team (bench/finance.py, by email) answer from the answer key.",
+ "wake": "hooks",
+ "dispatcher": "widgex-hooks",
+ "wake_why": "Workflows run only when the forwarder (desk/forwarder.py) fires their WidgeX hook."
+}

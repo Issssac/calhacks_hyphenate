@@ -39,7 +39,11 @@ if str(ROOT) not in sys.path:
 
 from ledgerdb import db  # noqa: E402
 
-HARNESS_DIR = ROOT / ".widgex" / "harnesses"
+# Where WidgeX finds this desk's live workflows. A second company's desk that lives in a checkout WidgeX doesn't
+# open can put its workflows in the open project's folder instead, under a file-name prefix, with a check shim
+# in a subfolder that loads this checkout's checks (see ensure_shim).
+HARNESS_DIR = Path(os.environ["DESK_HARNESS_DIR"]) if os.environ.get("DESK_HARNESS_DIR") else ROOT / ".widgex" / "harnesses"
+HARNESS_FILE_PREFIX = os.environ.get("DESK_HARNESS_FILE_PREFIX", "")
 PROPOSED = ROOT / "workflows" / "proposed"
 HISTORY = ROOT / "workflows" / "history"
 PROMPTS = ROOT / "workflows" / "prompts"
@@ -49,7 +53,7 @@ STRUCTURE = structure_dir()
 POLICY = STRUCTURE / "policy.json"
 # WidgeX resolves check.file relative to the harness file's folder and refuses anything outside
 # it, so the workflows point at a shim in .widgex/harnesses/checks/ that loads checks/ledger_checks.py.
-CHECKS = "checks/ledger_checks.py"
+CHECKS = os.environ.get("DESK_CHECKS_SHIM", "checks/ledger_checks.py")
 DRIVERS = ("intake", "orders", "billing", "cash", "reconcile", "pricing")
 # Two companies' desks can share one WidgeX: each names its workflows and hooks with its own prefix
 # (set in that checkout's .env). The defaults are the first desk's, so nothing about it changes.
@@ -461,7 +465,45 @@ def sha(path: Path) -> str:
 
 
 def live_path(driver: str) -> Path:
-    return HARNESS_DIR / f"{driver}.json"
+    return HARNESS_DIR / f"{HARNESS_FILE_PREFIX}{driver}.json"
+
+
+SHIM = '''"""Shim for the {company} desk: WidgeX only runs check files inside its harness folder, so this loads the desk's
+real checks from {root}/checks/ledger_checks.py (that checkout's .env selects its ledger, books and policy)."""
+
+import importlib.util
+import sys
+from pathlib import Path
+
+_ROOT = Path(r"{root}")
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+_spec = importlib.util.spec_from_file_location("desk_checks", _ROOT / "checks" / "ledger_checks.py")
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+
+for _name in dir(_mod):
+    if not _name.startswith("_") and callable(getattr(_mod, _name)):
+        globals()[_name] = getattr(_mod, _name)
+'''
+
+
+def ensure_shim() -> list[Path]:
+    """When the workflows live outside this checkout, write the check shim beside them (and beside proposals,
+    which harness_check resolves relative to their own folder) pointing back at this checkout's checks."""
+    if HARNESS_DIR == ROOT / ".widgex" / "harnesses":
+        return []
+    company = json.loads((STRUCTURE / "pipeline.json").read_text(encoding="utf-8")).get("company", "second") \
+        if (STRUCTURE / "pipeline.json").exists() else "second"
+    text = SHIM.format(company=company, root=ROOT.as_posix())
+    out = []
+    for path in (HARNESS_DIR / CHECKS, PROPOSED / CHECKS):
+        if not path.exists() or path.read_text(encoding="utf-8") != text:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+        out.append(path)
+    return out
 
 
 def current_version(conn, driver: str) -> int:
@@ -484,6 +526,7 @@ def wake_mode() -> str:
 def compile_(drivers: list[str], from_template: bool = False, mode: str | None = None,
              wake: str | None = None) -> list[dict]:
     PROPOSED.mkdir(parents=True, exist_ok=True)
+    ensure_shim()
     mode = mode or approval_mode()
     wake = wake or wake_mode()
     out = []
@@ -711,6 +754,7 @@ def promote(conn, driver: str, ctx: dict, addresses: list[str], summary: str = "
         if (PROMPTS / driver).exists():
             shutil.copytree(PROMPTS / driver, arch / "prompts", dirs_exist_ok=True)
     HARNESS_DIR.mkdir(parents=True, exist_ok=True)
+    ensure_shim()
     spec = json.loads(prop.read_text(encoding="utf-8"))
     spec["description"] = f"Revenue desk {driver} driver (v{cur + 1})"
     live.write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
@@ -800,7 +844,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.cmd in ("architect", "controller"):
         HARNESS_DIR.mkdir(parents=True, exist_ok=True)
-        path = HARNESS_DIR / f"{args.cmd}.json"
+        ensure_shim()
+        path = HARNESS_DIR / f"{HARNESS_FILE_PREFIX}{args.cmd}.json"
         spec = architect_template() if args.cmd == "architect" else controller_template(wake_mode())
         path.write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
         out({"path": str(path), "sha256": sha(path)})
