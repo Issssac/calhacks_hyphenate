@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Halyard revenue desk: what it does</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{font-family:Segoe UI,Arial,sans-serif;background:#f6f7f9;color:#1d2330;margin:0;line-height:1.5}
+main{max-width:980px;margin:0 auto;padding:32px 24px 64px}
+h1{font-size:28px;margin:0 0 6px} h2{font-size:19px;margin:36px 0 10px} h3{font-size:15px;margin:0 0 4px}
+p{font-size:15px;max-width:820px} .lead{font-size:17px;color:#2d3b55}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.card{background:#fff;border:1px solid #d9dde4;border-radius:8px;padding:14px 16px}
+.card p{font-size:14px;margin:4px 0 0;color:#4b5565}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0}
+.step{background:#e8f0fe;border:1.5px solid #2f5fd0;border-radius:8px;padding:8px 14px;font-weight:600;font-size:14px}
+.arrow{color:#2d3b55;font-weight:700}
+.human{background:#fff0e0;border-color:#d9822b}.gate{background:#fde8e8;border-color:#c23b3b}.led{background:#e6f5ec;border-color:#1f8a4c}
+table{border-collapse:collapse;width:100%;background:#fff;border:1px solid #d9dde4;border-radius:8px;font-size:14px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid #e6e9ee;vertical-align:top} th{background:#eef1f5}
+code{background:#eef1f5;padding:1px 5px;border-radius:4px;font-size:13px}
+.note{background:#fff7d6;border:1px solid #b8960c;border-radius:8px;padding:10px 14px;font-size:14px}
+.green{background:#e6f5ec;border:1.5px solid #1f8a4c;border-left-width:6px;border-radius:8px;padding:12px 16px;margin:14px 0;color:#14532d}
+.green h3{color:#166534;font-size:15px;margin:0 0 6px} .green p,.green li{font-size:14px;margin:4px 0;max-width:none} .green ul{margin:4px 0;padding-left:20px}
+.tag{display:inline-block;background:#1f8a4c;color:#fff;font-size:11px;font-weight:700;border-radius:4px;padding:1px 7px;margin-right:6px;vertical-align:1px}
+td.g{background:#e6f5ec;color:#14532d}
+</style></head><body><main>
+
+<h1>Halyard revenue desk</h1>
+<p class="lead">AI agents that run the revenue side of a small distributor: take orders from email, bill customers, pay suppliers, and reconcile the books. A controller keeps only the decisions.</p>
+
+<div class="green">
+<h3><span class="tag">PROMPT</span>How this relates to the Hyphenate track: "The Hyphenated Enterprise: Autonomous Systems for Finance"</h3>
+<p><b>The ask:</b> pick a company and a few finance seats that work closely together, then build the autonomous system you would hire to fill them, plus the company it works in. The system should pick up work on its own, be explainable and accountable, and respect limits.</p>
+<p><b>Our corner:</b> Accounts Receivable, Accounts Payable and Cash, plus a reconciliation seat. The company is Halyard Marine Supply, a small distributor. Seats: order entry, customer billing, cash application, vendor bills and payments, reconciler. The controller keeps the decisions.</p>
+<p><b>The hard parts the prompt names, and where we meet them:</b></p>
+<ul>
+<li><b>Sources that disagree.</b> S03: the email says $4.00 and the PDF says $4.40, and the PDF governs with the reason recorded. S07: a supplier overbills $13 a unit and the 3-way match flags it. Reconcile compares our ledger to Odoo's trial balance and to the bank.</li>
+<li><b>Time.</b> Phase 1 of the scenarios teaches a desk something and phase 2 tests it. S04 is a contract customer quoted at list price, the controller rejects it, orders rewrites its workflow, and S08 (the same customer later) is caught with no controller. Short-pays and receipts also arrive after the invoice. <i>Gap:</i> we don't simulate month-end close or period locking.</li>
+<li><b>Working with others.</b> Drafts wait for a controller approval, and a rejection triggers revision. <i>Gap:</i> in the benchmark the controller is a rule-based stand-in reading the answer key; a person can take that seat through a review card.</li>
+<li><b>Limits.</b> A role may write only its own event kinds, nobody approves what they drafted, and vendors are paid only to the bank account on file in Odoo. <i>Gap:</i> identities are asserted, not authenticated.</li>
+<li><b>Explainable and accountable.</b> Every event names actor, role, workflow version and source down to the attachment page, in an append-only hash-chained ledger. <code>trace</code> explains any document.</li>
+</ul>
+<p><b>The four judging questions:</b></p>
+<ul>
+<li><b>Real enough?</b> Real Odoo 18 documents and journal entries, a real Increase sandbox bank, PDFs generated and read for real. The messiness is planted: ten scenarios with an answer key, scored by <code>eval.score</code>, with real and simulated events counted separately.</li>
+<li><b>Would you hire it?</b> Limited roles, a clean record of its work, and it asks before anything posts or pays. It also refuses the injected "pay this account" email (S09).</li>
+<li><b>Something new?</b> See the next green box.</li>
+<li><b>The moment.</b> It catches its own blind spot: after a rejection, it fixes its own process and then catches the repeat unaided.</li>
+</ul>
+<p><b>Submission list:</b> one line on seats, proof of what is real versus simulated, and code are covered. The demo video that opens on the moment and the live demo still have to be made.</p>
+</div>
+
+<h2>What it does</h2>
+<div class="flow">
+  <div class="step">Customer email / PDF</div><span class="arrow">→</span>
+  <div class="step">Intake</div><span class="arrow">→</span>
+  <div class="step">Orders</div><span class="arrow">→</span>
+  <div class="step">Billing</div><span class="arrow">→</span>
+  <div class="step">Cash</div><span class="arrow">→</span>
+  <div class="step">Reconcile</div>
+</div>
+<div class="grid">
+  <div class="card"><h3>Intake</h3><p>Reads emails and PDFs, classifies them, extracts the quote, and flags duplicates, conflicts and suspicious instructions.</p></div>
+  <div class="card"><h3>Orders</h3><p>Turns a quote into a sales order and purchase orders in Odoo, using contract prices and the right suppliers.</p></div>
+  <div class="card"><h3>Billing</h3><p>Issues customer invoices and checks vendor bills with a 3-way match (order, receipt, bill).</p></div>
+  <div class="card"><h3>Cash</h3><p>Applies customer payments and pays vendors, only after approval and only to the bank account on file.</p></div>
+  <div class="card"><h3>Reconcile</h3><p>Compares our ledger to Odoo's trial balance and to the bank, and pins any mistake on the desk that made it.</p></div>
+  <div class="card"><h3>Architect</h3><p>Runs once up front. Studies Odoo, the bank and the inbox, writes the company profile and policy, and builds each desk's workflow.</p></div>
+</div>
+
+<h2>What makes it trustworthy</h2>
+<div class="flow">
+  <div class="step">Agent drafts</div><span class="arrow">→</span>
+  <div class="step gate">Code check against the ledger</div><span class="arrow">→</span>
+  <div class="step human">Controller approval</div><span class="arrow">→</span>
+  <div class="step gate">Posting gate</div><span class="arrow">→</span>
+  <div class="step led">Odoo / bank</div>
+</div>
+<p>Controls are enforced in Python, not in prompts. An agent saying "done" is never enough; a check reads the ledger and has to agree.</p>
+<table>
+<tr><th>Control</th><th>Effect</th></tr>
+<tr><td>Roles</td><td>Each role may only write its own kinds of events. Intake cannot post or approve.</td></tr>
+<tr><td>No self-approval</td><td>Nobody approves what they drafted.</td></tr>
+<tr><td>Approval before posting</td><td>Nothing is confirmed in Odoo without an approval after the latest draft.</td></tr>
+<tr><td>3-way match</td><td>Bills post only on a code-computed match, or with an explicit approval of the variance.</td></tr>
+<tr><td>Safe payments</td><td>Vendors are paid only to the bank account in Odoo's vendor master. Non-sandbox banking is refused by default.</td></tr>
+<tr><td>Untrusted email</td><td>Intake can't touch the books, and injected instructions are flagged.</td></tr>
+<tr><td>Tamper-evident log</td><td>Append-only, hash-chained SQLite ledger; <code>ledgerdb verify</code> recomputes the chain.</td></tr>
+</table>
+
+<h2>It improves itself, under supervision</h2>
+<div class="flow">
+  <div class="step human">Controller rejects, or reconcile finds a mistake</div><span class="arrow">→</span>
+  <div class="step">Overruled</div><span class="arrow">→</span>
+  <div class="step">Revise</div><span class="arrow">→</span>
+  <div class="step">Adopt</div><span class="arrow">→</span>
+  <div class="step led">Promote (old version archived)</div>
+</div>
+<p>The desk diagnoses why its own workflow let the mistake through, edits a proposed copy, and validates it. A revision goes live only with a controller approval. It can add controls but never remove them or change existing thresholds.</p>
+
+<div class="green">
+<h3><span class="tag">NOVEL</span>What is new here</h3>
+<ul>
+<li><b>Workflows that rewrite themselves under control.</b> When a desk is overruled, it diagnoses why its own state machine let the mistake through and proposes a fix. The fix needs a controller approval, can add controls but never remove them, and the old version is archived. Scenarios S04 and S08 show it: the same customer is caught with no controller needed after the revision.</li>
+<li><b>Gates the agent cannot talk its way past.</b> A transition fires only if the agent says yes <i>and</i> a Python check reads the ledger and agrees. Posting to Odoo and sending money are blocked in code until an approval exists.</li>
+<li><b>One hash-chained ledger with sources down to the attachment page.</b> <code>trace</code> explains any document back to the email that caused it.</li>
+<li><b>Built-in adversarial tests.</b> Ten planted scenarios with an answer key, including a prompt-injection email and a vendor who overbills, scored automatically.</li>
+<li><b>An architect that surveys the company first</b> and compiles one validated workflow per desk, rather than shipping a fixed pipeline.</li>
+</ul>
+</div>
+
+<h2>Answering "why did it do that?"</h2>
+<p>Every event in the ledger records who acted, in what role, under which workflow version, and from which sources (down to the email attachment page). <code>python -m ledgerdb trace &lt;entity&gt;</code> walks a document from the quote through the order, invoice and payments back to the mail and bank.</p>
+
+<h2>Real and simulated</h2>
+<table>
+<tr><th>Real</th><th>Simulated</th></tr>
+<tr><td>Odoo 18 (local Docker) documents and journal entries; Increase sandbox bank; the agents' reading of emails and PDFs; the ledger, checks and reconciliation</td>
+<td>The company, customers and suppliers; customers paying and goods arriving; emails via a drop folder; in benchmark mode, the controller</td></tr>
+</table>
+
+<h2>Proof</h2>
+<p>Ten planted scenarios (conflicting prices, tax-exempt buyers, duplicates, overbilling vendors, a prompt-injection email, unsourceable items) come with an answer key. <code>python -m eval.score</code> marks each check pass, fail or pending.</p>
+
+<h2>Similar things that exist</h2>
+<p>Findings come from a quick web search, not a deep survey. Vendor claims are marketing, and I did not check licences or how active the open-source projects are.</p>
+<table>
+<tr><th>Kind</th><th>Examples</th><th>What they do</th><th>Our product compared</th></tr>
+<tr><td>AP automation platforms</td><td><a href="https://www.g2.com/compare/stampli-vs-tipalti">Stampli, Tipalti</a></td><td>Invoice capture, GL coding, duplicate detection, approval routing, PO matching and vendor payments. Stampli's AI assistant Billy does the coding and routing, and it connects to 70+ ERPs. Both are mainly AP tools.</td>
+<td class="g">Similar: duplicate detection, approvals, 3-way match. Different: we also cover orders, customer invoicing and cash application, and the controls are code gates on a ledger we own. Weaker: no OCR at scale, no vendor onboarding or international payments, and a sandbox bank only.</td></tr>
+<tr><td>Agentic finance and close tools</td><td><a href="https://www.blackline.com/resources/beyond-the-ai-hype-how-agentic-operations-are-transforming-the-office-of-the-cfo/">BlackLine</a>, <a href="https://beancount.io/blog/2026/05/10/agentic-ai-bookkeeping-2026-autonomous-finance-agents-month-end-close-ap-reconciliation-workflows-guide">guides on AP and reconciliation agents</a></td><td>Autonomous agents for month-end close, AP and reconciliation. The guidance in this space asks for human checkpoints on anything that posts or pays, immutable audit trails, and hard limits on what an agent can post.</td>
+<td class="g">Same advice, built in: the approval gate, the append-only log and the role limits are exactly those recommendations. Different: ours is a small open demo, not a certified product (no SOC 2).</td></tr>
+<tr><td>Odoo + LLM integrations</td><td><a href="https://github.com/yourtechtribe/model-context-protocol-mcp-odoo">MCP-Odoo</a>, OOSDK, <a href="https://www.cdata.com/kb/tech/odoo-cloud-langgraph.rst">CData Connect AI</a>, ECOSIRE</td><td>Give an agent read and write access to Odoo through MCP or a managed connector. OOSDK lists an order-to-cash flow with advisors that only recommend and wait for human approval. Permissions in ECOSIRE follow Odoo's access rights.</td>
+<td class="g">They are connectors; we are the process around the connector. We add the ledger, roles, posting gate, match logic and reconciliation, and the self-revision loop none of them mention.</td></tr>
+</table>
+
+<div class="green">
+<h3><span class="tag">NOVEL</span>Compare and contrast in one line</h3>
+<p><b>Alike:</b> everyone is automating the AP and AR back office with LLMs and keeping a human on approvals. <b>Different:</b> the commercial tools sell the automation, the connectors sell the access, and ours treats the controls and the agents' own workflow changes as the product. In the sources I found, none described agents revising their own workflows after a rejection. That may be my search, not proof it does not exist.</p>
+</div>
+
+<h2>Known limits</h2>
+<div class="note">Identities are asserted, not authenticated, so the controls stop mistakes but not an agent that lies about who it is. Odoo uses one shared admin login. Money is handled as floats rounded to cents. The benchmark controller is rule-based. Full list in <code>README.md</code>.</div>
+
+<p style="margin-top:32px;color:#4b5565;font-size:13px">Built for CalHacks 2026, Hyphenate track, on WidgeX harnesses, Odoo 18 and an Increase sandbox bank. See <a href="architecture.html">architecture.html</a> for the diagram.</p>
+</main></body></html>
