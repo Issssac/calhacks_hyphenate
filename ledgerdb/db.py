@@ -42,11 +42,33 @@ class LedgerError(ValueError):
     """A write the ledger refused. The message says which rule and why."""
 
 
+SHARED_HOME = Path.home() / ".revenue-desk"
+
+
+def load_repo_env(path: Path = REPO_ROOT / ".env") -> None:
+    """Read the checkout's .env into the environment (without overriding what is already set).
+
+    It runs on import, before anything asks where the desk lives, so a checkout whose .env says
+    REVENUE_DESK_HOME=... (a second company's desk) can never fall through to another desk's ledger.
+    """
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+load_repo_env()
+
+
 def desk_home() -> Path:
-    """One folder per machine for shared state, outside any checkout, so every
-    agent appends to the same ledger whichever worktree it runs in."""
+    """One folder per desk for shared state, outside any checkout, so every agent appends to the
+    same ledger whichever worktree it runs in. REVENUE_DESK_HOME selects another company's desk."""
     env = os.environ.get("REVENUE_DESK_HOME")
-    return Path(env) if env else Path.home() / ".revenue-desk"
+    return Path(env).expanduser() if env else SHARED_HOME
 
 
 def default_path() -> Path:

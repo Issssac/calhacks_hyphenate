@@ -6,6 +6,8 @@ import email.utils
 import io
 from email.message import EmailMessage
 
+from . import world
+
 
 def pdf_bytes(title: str, lines: list[tuple], notes: list[str] | None = None, money_cols: str = "Unit price",
               party: str = "") -> bytes:
@@ -56,7 +58,7 @@ def message(sender: str, to: str, subject: str, body: str, attachments: list[tup
     msg["To"] = to
     msg["Subject"] = subject
     msg["Date"] = date or email.utils.formatdate(localtime=True)
-    msg["Message-ID"] = message_id or email.utils.make_msgid(domain="sim.halyard.example")
+    msg["Message-ID"] = message_id or email.utils.make_msgid(domain=world.MSGID_DOMAIN)
     if in_reply_to:
         msg["In-Reply-To"] = in_reply_to
         msg["References"] = in_reply_to

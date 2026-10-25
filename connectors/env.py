@@ -1,7 +1,8 @@
 """Tiny .env loader and token store, so we need no extra dependency.
 
-Settings are read from <repo>/.env and then ~/.revenue-desk/.env (the shared
-desk home), so an agent in any worktree finds the same keys.
+Settings are read from <repo>/.env, then the desk's home (REVENUE_DESK_HOME, default
+~/.revenue-desk), then ~/.revenue-desk/.env, which holds the keys every desk on this machine
+shares (the sandbox bank's API key). An agent in any worktree finds the same keys.
 """
 
 from __future__ import annotations
@@ -10,14 +11,14 @@ import json
 import os
 from pathlib import Path
 
-from ledgerdb.db import desk_home
+from ledgerdb.db import SHARED_HOME, desk_home
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = desk_home()
 
 
 def load_env(path: Path | None = None) -> None:
-    for p in ([path] if path else [REPO_ROOT / ".env", desk_home() / ".env"]):
+    for p in ([path] if path else [REPO_ROOT / ".env", desk_home() / ".env", SHARED_HOME / ".env"]):
         if not p.exists():
             continue
         for line in p.read_text(encoding="utf-8").splitlines():
@@ -37,6 +38,7 @@ def need(*keys: str) -> dict[str, str]:
 
 
 def read_token(name: str) -> dict:
+    # Tokens are per desk on purpose: a second company's desk must not read the first one's mailbox.
     p = DATA_DIR / "tokens" / f"{name}.token.json"
     return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
 

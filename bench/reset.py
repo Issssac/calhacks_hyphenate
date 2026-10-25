@@ -2,10 +2,14 @@
 
     python -m bench.reset
 
-1. Moves the ledger, the simulator's state and all pulled mail to ~/.revenue-desk/runs/<timestamp>/.
+1. Moves the ledger, the simulator's state and all pulled mail to <desk home>/runs/<timestamp>/.
 2. Keeps workflows/history/ and the live workflows; the new ledger is told each workflow's version.
-3. Recreates the Odoo database `revenue` from empty and seeds Halyard Marine Supply.
+3. Recreates the desk's Odoo database (ODOO_DB, default `revenue`) from empty and seeds the
+   loaded world's company (DESK_WORLD, default Halyard Marine Supply).
 4. Creates a fresh ledger.
+
+Several desks share one Odoo container, each with its own database. Set COMPOSE_PROJECT_NAME in a
+second desk's .env to the project that runs Odoo, so compose finds the same containers.
 
 The Increase sandbox keeps its history (sandbox money can't be un-sent). Reconcile treats
 earlier deposits as the opening position.
@@ -17,6 +21,7 @@ After this, compile and validate the workflows, promote them, send the quotes
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -61,9 +66,10 @@ def main() -> int:
     for p in (ROOT / "workflows" / "proposed").glob("*.json") if (ROOT / "workflows" / "proposed").exists() else []:
         p.unlink()
 
+    dbname = os.environ.get("ODOO_DB", "revenue")
     sh("docker", "compose", "stop", "odoo")
-    sh("docker", "compose", "exec", "-T", "db", "dropdb", "-U", "odoo", "--if-exists", "--force", "revenue")
-    sh("docker", "compose", "run", "--rm", "odoo", "odoo", "-d", "revenue", "-i", MODULES, "--stop-after-init",
+    sh("docker", "compose", "exec", "-T", "db", "dropdb", "-U", "odoo", "--if-exists", "--force", dbname)
+    sh("docker", "compose", "run", "--rm", "odoo", "odoo", "-d", dbname, "-i", MODULES, "--stop-after-init",
        "--without-demo=all")
     sh("docker", "compose", "up", "-d", "odoo")
     time.sleep(8)

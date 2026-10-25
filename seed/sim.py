@@ -27,7 +27,7 @@ from .scenarios import BY_ID, SCENARIOS
 
 STATE = DATA_DIR / "sim_state.json"
 SIM = {"actor": "world-sim", "role": "simulator", "workflow": None, "run_id": None, "workflow_version": None}
-DESK_ADDR = "Halyard Marine Supply <desk@halyard.example>"
+DESK_ADDR = world.DESK_ADDR
 
 
 def load() -> dict:
@@ -71,7 +71,7 @@ def send_quotes(conn, phase: int, use_gmail: bool = False) -> list[dict]:
             p = s["pdf"]
             atts.append((p["filename"], mail.pdf_bytes(p["title"], p["lines"], p.get("notes"), party=s["customer"])))
         reply = st["sent"].get(s.get("reply_to") or "", {}).get("message_id")
-        mid = f"<{s['id'].lower()}.{int(time.time())}@sim.halyard.example>"
+        mid = f"<{s['id'].lower()}.{int(time.time())}@{world.MSGID_DOMAIN}>"
         raw = mail.message(s["sender"], DESK_ADDR, s["subject"], s["body"], atts, message_id=mid, in_reply_to=reply)
         name = f"{s['id']}-{int(time.time())}.eml"
         where = _deliver(raw, name, use_gmail)

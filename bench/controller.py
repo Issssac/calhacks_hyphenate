@@ -121,8 +121,8 @@ def suggest(conn, entity: str, workflow: str, req: dict) -> dict:
         sop = db.latest_payload(conn, so) if so else {}
         if exp.get("orders_flagged"):
             return {**base, "decision": "reject",
-                    "note": "We can't source a custom davit. Cancel this sales order and tell the customer we "
-                            "don't supply it."}
+                    "note": exp.get("orders_flagged_note") or "We can't source this item. Cancel this sales order "
+                                                               "and tell the customer we don't supply it."}
         amendment = next((x for x in BY_ID.values() if x.get("reply_to") == sid
                           and x["expect"].get("addon_so")), None)
         if so and quote and amendment:

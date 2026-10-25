@@ -27,6 +27,7 @@ import argparse
 import difflib
 import hashlib
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -47,6 +48,10 @@ POLICY = ROOT / "structure" / "policy.json"
 # it, so the workflows point at a shim in .widgex/harnesses/checks/ that loads checks/ledger_checks.py.
 CHECKS = "checks/ledger_checks.py"
 DRIVERS = ("intake", "orders", "billing", "cash", "reconcile")
+# Two companies' desks can share one WidgeX: each names its workflows and hooks with its own prefix
+# (set in that checkout's .env). The defaults are the first desk's, so nothing about it changes.
+DESK_SLUG = os.environ.get("DESK_SLUG", "revenue-desk")
+HOOK_PREFIX = os.environ.get("DESK_HOOK_PREFIX", "hook-rd")
 ROLE = {"intake": "intake", "orders": "orders", "billing": "billing", "cash": "cash", "reconcile": "reconcile",
         "architect": "architect", "controller": "controller"}
 TAIL = ("overruled", "revise", "adopt", "promote")
@@ -115,7 +120,7 @@ def _review_pointer(driver: str, state: str) -> str:
 #   hooks  it runs only when started: an empty queue ends the run; a ledger request ends the run, and the
 #          inbox forwarder (desk/forwarder.py) fires the workflow's hook when the decision lands
 WAKE_MODES = ("poll", "hooks")
-HOOK_IDS = {w: f"hook-rd{w}" for w in DRIVERS + ("controller",)}
+HOOK_IDS = {w: f"{HOOK_PREFIX}{w}" for w in DRIVERS + ("controller",)}
 
 HOOKS_REVIEW_POINTER = (
     "\nThis is a controller decision point. Do what the instructions file says to prepare the request, then record "
@@ -330,7 +335,7 @@ def template(driver: str, mode: str = "human", wake: str = "poll") -> dict:
 
 def display_name(workflow: str) -> str:
     """What the Harnesses page shows. File names (and so the ledger's workflow ids) stay plain."""
-    return f"revenue-desk-{workflow}"
+    return f"{DESK_SLUG}-{workflow}"
 
 
 # What a desk agent needs from WidgeX's own system prompt: none of the browser, preview, board or
@@ -585,7 +590,7 @@ def weakened(live: dict, new: dict, driver: str | None = None) -> list[str]:
     """A revision may add controls, never remove them, and may not open a new way into a write state."""
     missing = _controls(live) - _controls(new)
     out = [f"removes {kind} {what!r}" for kind, what in sorted(missing, key=str)]
-    writes = WRITE_STATES.get(driver or new.get("name", "").removeprefix("revenue-desk-"), set())
+    writes = WRITE_STATES.get(driver or new.get("name", "").removeprefix(f"{DESK_SLUG}-"), set())
     added = _entry_edges(new, writes) - _entry_edges(live, writes)
     out += [f"adds a new way into {to!r} (from {frm!r}, {kind}{', check ' + fn if fn else ''})"
             for frm, to, kind, fn, _ in sorted(added, key=str)]
