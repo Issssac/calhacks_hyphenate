@@ -214,6 +214,12 @@ def render(rec: dict, out_dir: Path | None = None) -> dict[str, Any]:
     text += ["", "Reply APPROVE, APPROVE WITH CHANGES (one 'MPN qty: price' per line), or REJECT: <why>."]
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "report.html").write_text(html_doc, encoding="utf-8")
+    # The same report for a browser: the email's inline images (cid:) point at the chart files beside it.
+    view = html_doc
+    for i, c in enumerate(charts):
+        if c:
+            view = view.replace(f"cid:chart-{i + 1}", Path(c).name)
+    (out_dir / "report-view.html").write_text(view, encoding="utf-8")
     (out_dir / "recommendation.json").write_text(json.dumps(rec, indent=2, default=str), encoding="utf-8")
     return {"dir": str(out_dir), "html": str(out_dir / "report.html"), "subject": subject, "text": "\n".join(text),
             "charts": [str(c) if c else None for c in charts]}
