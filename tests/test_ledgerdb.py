@@ -143,6 +143,8 @@ def test_queues_follow_the_flow(conn):
     assert q("intake") == [] and q("orders") == ["quote:Q-1"]
     add(conn, actor="orders-1", role="orders", kind="so.drafted", entity="so:SO-1001",
         payload={"total": 100}, links=[{"rel": "from_quote", "to": "quote:Q-1"}])
+    assert q("orders") == ["so:SO-1001"]  # drafted, nobody asked the controller yet
+    add(conn, actor="orders-1", role="orders", kind="approval.requested", entity="so:SO-1001")
     assert q("orders") == []
     add(conn, actor="orders-1", role="controller", kind="approval.granted", entity="so:SO-1001",
         on_behalf_of="human:andy")
