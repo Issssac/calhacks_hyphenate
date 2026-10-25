@@ -9,7 +9,11 @@ code does both.
 2. `python -m ledgerdb queue pricing`. Each item has a reason:
    - `needs pricing`: an extracted RFQ with no recommendation since its latest extraction
    - `finance rejected, re-price`: finance rejected the last recommendation. Their reason is on the RFQ
-     (`python -m ledgerdb state <rfq>`, the latest `approval.rejected`): take it into account in your calls
+     (`python -m ledgerdb state <rfq>`, the latest `approval.rejected`): take it into account in your calls.
+     If their reason is that we should **not quote this at all** (we can't supply it the way the customer needs,
+     for example), don't re-price it: record `quote.rejected` on the RFQ
+     (`--actor pricing-agent --role pricing --workflow pricing`) with `{"reason": "<finance's words>"}`, and it
+     leaves your queue.
    - `approved, quote to send`: finance approved; send the customer the quote
 3. Empty: you are done. Otherwise take the **oldest** item and focus on it:
    `python -m ledgerdb focus pricing <entity> --actor pricing-agent --role pricing`.

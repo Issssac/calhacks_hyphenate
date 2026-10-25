@@ -64,5 +64,8 @@ def message(sender: str, to: str, subject: str, body: str, attachments: list[tup
         msg["References"] = in_reply_to
     msg.set_content(body)
     for name, data in attachments or []:
-        msg.add_attachment(data, maintype="application", subtype="pdf", filename=name)
+        if name.lower().endswith(".csv"):
+            msg.add_attachment(data, maintype="text", subtype="csv", filename=name)
+        else:
+            msg.add_attachment(data, maintype="application", subtype="pdf", filename=name)
     return msg.as_bytes()

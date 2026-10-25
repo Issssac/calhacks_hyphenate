@@ -31,8 +31,9 @@ def unit_cost(offer: dict, qty: float) -> float | None:
 
 
 def choose(offers: list[dict], qty: float, days_available: int | None = None,
-           allow_broker: bool = False) -> dict[str, Any]:
-    """Pick the supplier for `qty` units. Returns the choice, the alternatives considered, and why."""
+           allow_broker: bool = False, prefer: str = "cost") -> dict[str, Any]:
+    """Pick the supplier for `qty` units. Returns the choice, the alternatives considered, and why.
+    prefer="lead" picks the earliest delivery instead of the lowest cost (when no one can make the date)."""
     considered = []
     for off in offers:
         c = unit_cost(off, qty)
@@ -60,7 +61,10 @@ def choose(offers: list[dict], qty: float, days_available: int | None = None,
             flags.append("broker: no authorized source can supply this; needs approval (counterfeit risk)")
     if not pool:
         return {"chosen": None, "considered": considered, "flags": ["no source can supply this quantity in time"]}
-    best = min(pool, key=lambda x: (x["unit_cost"], x["lead_days"] or 0))
+    if prefer == "lead":
+        best = min(pool, key=lambda x: (x["lead_days"] or 0, x["unit_cost"]))
+    else:
+        best = min(pool, key=lambda x: (x["unit_cost"], x["lead_days"] or 0))
     if not best["authorized"] and not flags:
         flags.append("broker: not an authorized source; needs approval (counterfeit risk)")
     return {"chosen": best, "considered": considered, "flags": flags}
@@ -74,7 +78,7 @@ def cost_curve(offers: list[dict], tiers: tuple[int, ...] = TIERS, days_availabl
         c = choose(offers, q, days_available, allow_broker)
         if c["chosen"] is None and days_available is not None:
             # Nobody can make the date. Quote the earliest delivery that can be made, and say it's late.
-            late = choose(offers, q, None, allow_broker)
+            late = choose(offers, q, None, allow_broker, prefer="lead")
             if late["chosen"] is not None:
                 c = {**late, "flags": late["flags"] + [
                     f"can't meet the need-by date: earliest delivery {late['chosen']['lead_days']} days "
@@ -148,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "choose":
         out = choose(offers, args.qty, args.days, args.allow_broker)
         if out["chosen"] is None and args.days is not None:
-            late = choose(offers, args.qty, None, args.allow_broker)
+            late = choose(offers, args.qty, None, args.allow_broker, prefer="lead")
             if late["chosen"]:
                 late["flags"].append(f"can't meet the need-by date: earliest {late['chosen']['lead_days']} days")
                 out = late

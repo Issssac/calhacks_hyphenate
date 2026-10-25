@@ -211,7 +211,16 @@ def provenance(conn) -> dict:
 
 def run(conn) -> dict:
     sim = load_sim()
-    results = [score_scenario(conn, s, sim) for s in SCENARIOS]
+    from seed import world
+    if world.FLOW == "rfq":
+        from eval.score_rfq import desk_checks, score_rfq
+        helpers = {"mail_for": _mail_for, "children": _children, "kinds": _kinds}
+        results = [score_rfq(conn, s, sim, helpers) for s in SCENARIOS if s.get("expect")]
+        desk = desk_checks(conn)
+        if desk:
+            results.append({"id": "DESK", "title": "The desk as a whole", "checks": desk})
+    else:
+        results = [score_scenario(conn, s, sim) for s in SCENARIOS]
     tally = Counter(c["status"] for r in results for c in r["checks"])
     from ledgerdb import manifest
     return {"scenarios": results, "tally": dict(tally), "provenance": provenance(conn),

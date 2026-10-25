@@ -318,6 +318,57 @@ def recommend(conn, rfq: str, ctx: dict, odoo=None) -> dict:
     return payload
 
 
+def record_outcomes(conn, ctx: dict | None = None, today: date | None = None) -> list[dict]:
+    """Turn every settled quote into training rows: won (the customer's PO), lost (they declined), or expired
+    (no PO by valid_until). Each becomes one `pricing.outcome` on the RFQ, and the model refits on them."""
+    ctx = ctx or {"actor": "pricing-outcomes", "role": "pricing", "workflow": "pricing"}
+    today = today or date.today()
+    done = {r["entity"] for r in db.rows(conn, "SELECT DISTINCT entity FROM events WHERE kind = 'pricing.outcome'")}
+    out = []
+    for s in db.rows(conn, "SELECT seq, entity, ts, payload FROM events WHERE kind = 'quote.sent' ORDER BY seq"):
+        rfq = s["entity"]
+        if rfq in done:
+            continue
+        acc = db.rows(conn, "SELECT payload FROM events WHERE entity = ? AND kind = 'quote.accepted' AND seq > ? "
+                            "ORDER BY seq LIMIT 1", [rfq, s["seq"]])
+        dec = conn.execute("SELECT 1 FROM events WHERE entity = ? AND kind = 'quote.declined' AND seq > ?",
+                           (rfq, s["seq"])).fetchone()
+        valid = str(s["payload"].get("valid_until") or "9999-12-31")
+        if not acc and not dec and today.isoformat() <= valid:
+            continue  # still open
+        outcome = "won" if acc else ("lost" if dec else "expired")
+        rec = db.rows(conn, "SELECT payload FROM events WHERE entity = ? AND kind = 'pricing.recommended' "
+                            "ORDER BY seq DESC LIMIT 1", [rfq])
+        rec = rec[0]["payload"] if rec else {}
+        calls = rec.get("calls", F.NEUTRAL)
+        ordered = {str(ln.get("mpn") or ln.get("item")).upper(): float(ln.get("qty", 0))
+                   for ln in (acc[0]["payload"].get("lines", []) if acc else [])}
+        rows = []
+        for ln in s["payload"].get("lines", []):
+            q = float(ln["qty"])
+            tier = None
+            for t in sorted(ln.get("schedule", []), key=lambda r: r["qty"]):
+                if q >= t["qty"]:
+                    tier = t
+            cost = next((r.get("unit_cost") for x in rec.get("lines", []) if x["mpn"] == ln["mpn"]
+                         for r in x.get("schedule", []) if tier and r["qty"] == tier["qty"]), None)
+            if not tier or not cost:
+                continue
+            got = ordered.get(str(ln["mpn"]).upper(), 0)
+            rows.append({"quote_id": rfq, "date": s["ts"][:10], "customer": rec.get("customer"), "mpn": ln["mpn"],
+                         "category": part_category(ln["mpn"]), "qty": int(q), "unit_cost": cost,
+                         "unit_price": tier["unit_price"], "markup": round(tier["unit_price"] / cost, 4),
+                         "urgency": calls["urgency"], "wtp": calls["wtp"], "growth": calls["growth"],
+                         "repeat": int(bool(rec.get("repeat"))), "won": int(got > 0), "ordered_qty": int(got),
+                         "source": "desk"})
+        db.append(conn, kind="pricing.outcome", entity=rfq, payload={"outcome": outcome, "rows": rows},
+                  sources=[f"ledger:seq{s['seq']}"], **ctx)
+        out.append({"rfq": rfq, "outcome": outcome, "rows": len(rows)})
+    if out:
+        fit_and_record(conn, ctx)
+    return out
+
+
 def explain(m: dict) -> list[str]:
     out = [f"{m['version']}: fit on {m['n']} quotes ({m['wins']} won); AUC {m['metrics']['auc']}, "
            f"Brier {m['metrics']['brier']}"]

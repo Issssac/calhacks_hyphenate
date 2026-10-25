@@ -91,6 +91,47 @@ def review_revision(conn, driver: str) -> dict:
     return {"decision": "approve", "note": f"Adopted: answers {', '.join(addressed)}; adds controls without removing any."}
 
 
+def _rfq_order_decision(conn, so: str, quote: str) -> dict:
+    """An order from an RFQ is right when it is the customer's PO, at the prices finance approved and quoted, and
+    each part is bought from the source the sourcing rule picks."""
+    from checks.ledger_checks import approved_unit_price
+    from pricing.sourcing import choose, offers_from_world
+    sop = db.latest_payload(conn, so) or {}
+    acc = db.rows(conn, "SELECT payload FROM events WHERE entity = ? AND kind = 'quote.accepted' ORDER BY seq DESC "
+                        "LIMIT 1", [quote])
+    want = {str(l.get("mpn") or l["item"]).upper(): float(l["qty"]) for l in (acc[0]["payload"]["lines"] if acc else [])}
+    problems = []
+    for ln in sop.get("lines", []):
+        mpn = str(ln.get("mpn") or ln["item"])
+        if want.get(mpn.upper()) != float(ln["qty"]):
+            problems.append(f"{mpn}: the customer's PO asks for {want.get(mpn.upper())}, the SO has {ln['qty']}")
+        price = approved_unit_price(conn, quote, mpn, float(ln["qty"]))
+        if price is None or abs(float(ln["unit_price"]) - price) > 0.005:
+            problems.append(f"{mpn}: quoted and approved at {price}, the SO has {ln['unit_price']}")
+    vendors = {}
+    for po in [r["src"] for r in db.rows(conn, "SELECT DISTINCT src FROM doc_links WHERE rel = 'for_so' AND dst = ?",
+                                         [so])]:
+        pp = db.latest_payload(conn, po) or {}
+        for ln in pp.get("lines", []):
+            vendors[str(ln.get("mpn") or ln["item"]).upper()] = pp.get("vendor")
+    from pricing.model import _days_until
+    ext = db.rows(conn, "SELECT payload FROM events WHERE entity = ? AND kind IN ('quote.extracted', 'quote.amended') "
+                        "ORDER BY seq DESC LIMIT 1", [quote])
+    need = {str(l.get("mpn") or l.get("item")).upper(): l.get("need_by") or ext[0]["payload"].get("need_by")
+            for l in (ext[0]["payload"].get("lines", []) if ext else [])}
+    for mpn, qty in want.items():
+        offers = offers_from_world(mpn)
+        days = _days_until(need.get(mpn))
+        c = choose(offers, qty, days)
+        if c["chosen"] is None and days is not None:
+            c = choose(offers, qty, prefer="lead")  # nobody makes the date: the earliest delivery, as the desk does
+        if c["chosen"] and vendors.get(mpn) != c["chosen"]["vendor"]:
+            problems.append(f"{mpn}: buy from {c['chosen']['vendor']} (the sourcing rule), not {vendors.get(mpn)}")
+    if problems:
+        return {"decision": "reject", "note": "; ".join(problems)}
+    return {"decision": "approve", "note": "Approved: the customer's PO at the approved quote, from the right sources."}
+
+
 def suggest(conn, entity: str, workflow: str, req: dict) -> dict:
     """What the answer key says a correct controller decides here."""
     state = req.get("review_state", "")
@@ -109,6 +150,9 @@ def suggest(conn, entity: str, workflow: str, req: dict) -> dict:
 
     if entity.startswith("workflow:") or state == "adopt":
         return {**base, **review_revision(conn, entity.split(":", 1)[1])}
+
+    if world.FLOW == "rfq" and workflow == "orders" and entity.startswith("so:") and quote:
+        return {**base, **_rfq_order_decision(conn, entity, quote)}
 
     if workflow == "intake" and state == "clarify":
         if exp.get("so"):

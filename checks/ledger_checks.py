@@ -359,7 +359,7 @@ def intake_handled(*_a: Any, **_k: Any) -> bool:
         quotes = _children(conn, mail, "from_mail", "quote") if mail else [f]
         for q in quotes:
             if not _last(conn, q, "quote.extracted", "quote.clarified", "quote.amended", "quote.duplicate",
-                         "quote.rejected", "quote.accepted"):
+                         "quote.rejected", "quote.accepted", "quote.declined"):
                 problems.append(f"{q} not resolved")
     return _record(conn, "intake_handled", not problems, {"focus": f, "problems": problems})
 

@@ -16,6 +16,7 @@ import argparse
 import json
 import sys
 import time
+from datetime import date, timedelta
 from pathlib import Path
 
 from connectors import increase, odoo
@@ -70,9 +71,19 @@ def send_quotes(conn, phase: int, use_gmail: bool = False) -> list[dict]:
         if s.get("pdf"):
             p = s["pdf"]
             atts.append((p["filename"], mail.pdf_bytes(p["title"], p["lines"], p.get("notes"), party=s["customer"])))
+        if s.get("csv"):
+            c = s["csv"]
+            text = "MPN,Quantity\r\n" + "".join(f"{mpn},{qty}\r\n" for mpn, qty in c["lines"])
+            atts.append((c["filename"], text.encode()))
         reply = st["sent"].get(s.get("reply_to") or "", {}).get("message_id")
+        if reply is None and s.get("reply_to"):
+            continue  # the message it answers hasn't gone out yet
         mid = f"<{s['id'].lower()}.{int(time.time())}@{world.MSGID_DOMAIN}>"
-        raw = mail.message(s["sender"], DESK_ADDR, s["subject"], s["body"], atts, message_id=mid, in_reply_to=reply)
+        body = s["body"]
+        if "{need_by}" in body:
+            need_by = (date.today() + timedelta(days=int(s.get("need_days", 21)))).isoformat()
+            body = body.replace("{need_by}", need_by)
+        raw = mail.message(s["sender"], DESK_ADDR, s["subject"], body, atts, message_id=mid, in_reply_to=reply)
         name = f"{s['id']}-{int(time.time())}.eml"
         where = _deliver(raw, name, use_gmail)
         st["sent"][s["id"]] = {"file": name, "message_id": mid, "where": where}
@@ -122,10 +133,84 @@ def _posted(conn, etype: str) -> list[tuple[str, dict]]:
     return list(latest.items())
 
 
+def _quoted_tier(line: dict, qty: float) -> dict | None:
+    tier = None
+    for t in sorted(line.get("schedule", []), key=lambda r: r["qty"]):
+        if qty >= t["qty"]:
+            tier = t
+    return tier
+
+
+def answer_quotes(conn, st: dict) -> list[dict]:
+    """Customers answer the quotes the desk sent: a PO for the lines they take, or a polite no. Each line is
+    decided by the hidden demand model at the quoted price (seed/worlds/<world>_truth.py) against the
+    scenario's fixed threshold u, so a run is repeatable."""
+    import importlib
+    truth = importlib.import_module(f"seed.worlds.{world.NAME}_truth")
+    from pricing.features import is_repeat
+    from pricing.model import history_path
+    st.setdefault("answered", {})
+    out = []
+    for q in db.rows(conn, "SELECT seq, entity, payload FROM events WHERE kind = 'quote.sent' ORDER BY seq"):
+        rfq, p = q["entity"], q["payload"]
+        if rfq in st["answered"]:
+            continue
+        sid = scenario_of(conn, rfq, st)
+        s = BY_ID.get(sid)
+        if not s:
+            continue
+        tr, cust = s.get("truth", {}), s.get("world", {}).get("customer", {})
+        rec = db.rows(conn, "SELECT payload FROM events WHERE entity = ? AND kind = 'pricing.recommended' "
+                            "ORDER BY seq DESC LIMIT 1", [rfq])
+        costs = {(x["mpn"], r["qty"]): r.get("unit_cost") for x in (rec[0]["payload"]["lines"] if rec else [])
+                 for r in x.get("schedule", [])}
+        repeat = is_repeat(s["customer"], history_path())
+        taken, considered = [], []
+        for ln in p.get("lines", []):
+            qty = float(cust.get("po_qty", {}).get(ln["mpn"], ln["qty"]))
+            tier = _quoted_tier(ln, qty)
+            cost = costs.get((ln["mpn"], tier["qty"])) if tier else None
+            if not tier or not cost:
+                continue
+            pw = truth.p_win(tier["unit_price"] / cost, qty, tr.get("urgency", "normal"), tr.get("wtp", "normal"),
+                             tr.get("growth", "flat"), repeat, s["customer"])
+            considered.append({"mpn": ln["mpn"], "qty": qty, "price": tier["unit_price"], "p_win": round(pw, 3)})
+            if pw >= float(cust.get("u", 0.5)):
+                taken.append((ln["mpn"], int(qty), tier["unit_price"]))
+        po = f"{''.join(w[0] for w in s['customer'].split())[:3].upper()}-PO-{4100 + len(st['answered'])}"
+        if taken:
+            subject = f"PO {po} for your quote"
+            body = (f"Hello,\n\nPlease accept our purchase order {po} against your quote:\n\n"
+                    + "".join(f"  {m}  qty {n:,}  at ${pr:,.4f} each\n" for m, n, pr in taken)
+                    + "\nShip to our usual address. Thank you.\n")
+            pdf = mail.pdf_bytes(f"PURCHASE ORDER {po}", [(m, n, pr) for m, n, pr in taken],
+                                 [f"Supplier: {world.COMPANY['name']}", "Terms: Net 30"], party=s["customer"])
+            atts = [(f"{po}.pdf", pdf)]
+        else:
+            subject = "Re: your quotation"
+            body = "Hello,\n\nThank you for the quote. We've placed this order with another distributor.\n"
+            atts = []
+        mid = f"<{sid.lower()}-answer.{int(time.time())}@{world.MSGID_DOMAIN}>"
+        raw = mail.message(s["sender"], DESK_ADDR, subject, body, atts, message_id=mid,
+                           in_reply_to=p.get("message_id"))
+        where = _deliver(raw, f"{sid}-answer-{int(time.time())}.eml", False)
+        st["answered"][rfq] = {"scenario": sid, "po": po if taken else None, "taken": taken,
+                               "considered": considered, "where": where}
+        db.append(conn, kind="sim.customer_answer", entity=f"sim:{sid}-answer",
+                  payload={"rfq": rfq, "scenario": sid, "accepted": bool(taken), "po": po if taken else None,
+                           "lines": taken, "considered": considered, "delivered": where}, **SIM)
+        out.append({"scenario": sid, "accepted": bool(taken), "lines": len(taken)})
+    return out
+
+
 def step(conn) -> dict:
     st = load()
     o = odoo.Odoo()
     done: dict = {"receipts": [], "bills": [], "payments": []}
+    if world.FLOW == "rfq":
+        from bench import finance
+        done["finance"] = finance.respond(conn)
+        done["customers"] = answer_quotes(conn, st)
 
     # 1. Suppliers ship: every confirmed PO gets its goods.
     for po, _ in _posted(conn, "po"):

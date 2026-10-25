@@ -133,7 +133,7 @@ WHERE s.entity_type = 'quote'
   AND EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind IN ('quote.extracted', 'quote.clarified')
               AND json_extract(e.payload, '$.rfq') = 1)
   AND NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity
-                  AND e.kind IN ('quote.rejected', 'quote.duplicate', 'quote.accepted'))
+                  AND e.kind IN ('quote.rejected', 'quote.duplicate', 'quote.accepted', 'quote.declined'))
   AND COALESCE((SELECT MAX(p.seq) FROM events p WHERE p.entity = s.entity AND p.kind = 'pricing.recommended'), 0)
       < MAX((SELECT MAX(x.seq) FROM events x WHERE x.entity = s.entity
              AND x.kind IN ('quote.extracted', 'quote.clarified', 'quote.amended')),
@@ -149,6 +149,7 @@ WHERE s.entity_type = 'quote'
   AND NOT EXISTS (SELECT 1 FROM events q WHERE q.entity = s.entity AND q.kind = 'quote.sent'
                   AND q.seq > (SELECT MAX(a.seq) FROM events a WHERE a.entity = s.entity
                                AND a.kind = 'approval.granted' AND a.role = 'finance'))
+  AND NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind IN ('quote.rejected', 'quote.declined'))
 UNION ALL
 -- orders: amended quotes whose SO predates the amendment
 SELECT 'orders', l.src, 'quote amended after SO', s.last_seq

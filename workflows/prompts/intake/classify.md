@@ -11,6 +11,7 @@ Classify it as exactly one of these:
 | `customer_quote` | a customer accepting or sending a priced quote (they state the prices) | create the quote (below), then extract |
 | `rfq` | a request for quote: a customer asks **us** to price parts (part numbers and quantities, usually no prices, maybe a need-by date or target price) | create the quote (below), then extract it as an RFQ |
 | `customer_po` | a customer's purchase order **accepting a quote we sent** (a reply to it, or citing our quote) | find that quote, re-focus on it, then extract the PO |
+| `quote_declined` | a customer saying no to a quote we sent ("went with another supplier", "too expensive") | find that quote; record `quote.declined` on it with `{"customer", "reason": "<their words>"}` and `--link from_mail=<mail>`; classify only |
 | `quote_amendment` | a change to an earlier quote (qty, price, items, dates) | find the original quote, re-focus on it, then extract the **whole revised deal** |
 | `vendor_bill` | a supplier's invoice to us | classify only; billing picks it up |
 | `remittance` | a customer telling us what a payment covers | classify only; put the invoice refs and amounts you see in the payload for cash |

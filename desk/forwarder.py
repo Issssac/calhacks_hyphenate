@@ -155,6 +155,14 @@ def run_once(conn, dispatcher, dry_run: bool = False) -> dict:
             sensed["finance_replies"] = decided
     except Exception as e:  # a reply that can't be read must not stop the desk
         sensed["finance_reply_error"] = f"{type(e).__name__}: {e}"[:200]
+    if conn.execute("SELECT 1 FROM events WHERE kind = 'quote.sent' LIMIT 1").fetchone():
+        try:
+            from pricing.model import record_outcomes
+            settled = record_outcomes(conn)
+            if settled:
+                sensed["quote_outcomes"] = settled
+        except Exception as e:
+            sensed["outcome_error"] = f"{type(e).__name__}: {e}"[:200]
     todo = plan(conn)
     woken = {}
     for wf, reasons in todo.items():
