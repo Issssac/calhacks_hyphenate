@@ -345,6 +345,13 @@ def append(
             raise LedgerError(f"cannot decide on {entity}: it does not exist")
         if actor in _entity_actors(conn, entity):
             raise LedgerError(f"{actor} created or worked on {entity} and may not also approve it")
+    if kind == "approval.requested" and etype in ("so", "po", "billpayment"):
+        # Asking again about a document that is already approved, unchanged since, only wakes the approver for nothing.
+        last_def = _last_defining_seq(conn, entity) or 0
+        if conn.execute("SELECT 1 FROM events WHERE entity = ? AND kind = 'approval.granted' AND seq > ?",
+                        (entity, last_def)).fetchone():
+            raise LedgerError(f"{entity} is already approved since its latest draft: there is nothing to ask. "
+                              "Carry on with the approved document.")
     if kind == "erp.posted":
         _check_posting(conn, policy, entity, etype, norm_links)
     if kind == "payment.applied":

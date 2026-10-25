@@ -1,21 +1,29 @@
 {
+ "margin_floor": 0.15,
+ "price_tolerance_pct": 0.02,
+ "price_tolerance_abs": 0.005,
+ "total_tie_abs": 0.01,
+ "controller": "human:controller",
+ "idle_minutes": 15,
+ "finance_approvers": [
+  "finance@redwoodmicro.example"
+ ],
+ "pricing": {
   "margin_floor": 0.15,
-  "price_tolerance_pct": 0.02,
-  "price_tolerance_abs": 0.005,
-  "total_tie_abs": 0.01,
-  "controller": "human:controller",
-  "idle_minutes": 15,
-  "finance_approvers": ["finance@redwoodmicro.example"],
-  "pricing": {
-    "margin_floor": 0.15,
-    "quote_cost": 15.0,
-    "valid_days": 30
-  },
-  "contract_prices": {},
-  "why": {
-    "margin_floor": "Distribution gross margin floor; the pricing model never recommends below it.",
-    "price_tolerance_abs": "Component unit costs run to fractions of a cent, so the absolute bill tolerance is half a cent.",
-    "finance_approvers": "Only finance approves a price; a reply from any other address is not acted on.",
-    "pricing.quote_cost": "Rough cost of preparing and following up one quote, subtracted in expected profit."
-  }
+  "quote_cost": 15.0,
+  "valid_days": 30
+ },
+ "contract_prices": {},
+ "why": {
+  "margin_floor": "Distribution gross margin floor; the pricing model never recommends below it.",
+  "price_tolerance_abs": "Component unit costs run to fractions of a cent, so the absolute bill tolerance is half a cent.",
+  "finance_approvers": "Only finance approves a price; a reply from any other address is not acted on.",
+  "pricing.quote_cost": "Rough cost of preparing and following up one quote, subtracted in expected profit."
+ },
+ "margin_floor_by_category": {
+  "FPGA": 0.25
+ },
+ "why_margin_floor_by_category": {
+  "FPGA": "Finance rejected quote:Q-1007 twice (ledger seq319 and seq593): 'FPGAs are on allocation: never quote them under a 25% margin, whoever the customer is.' Feedback F-1001."
+ }
 }

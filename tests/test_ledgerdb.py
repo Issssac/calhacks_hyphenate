@@ -214,3 +214,19 @@ def test_increase_refuses_production_by_default(monkeypatch):
     monkeypatch.delenv("INCREASE_ALLOW_PRODUCTION", raising=False)
     with pytest.raises(increase.BankError, match="real money"):
         increase.Increase()
+
+
+def test_no_second_request_for_an_already_approved_document(tmp_path, monkeypatch):
+    monkeypatch.setenv("LEDGER_DB", str(tmp_path / "l.db"))
+    from ledgerdb import db
+    c = db.connect(); db.init(c)
+    cash = {"actor": "cash-agent", "role": "cash", "workflow": "cash"}
+    db.append(c, kind="billpayment.drafted", entity="billpayment:BP-1", payload={"amount": 10}, **cash)
+    db.append(c, kind="approval.requested", entity="billpayment:BP-1", payload={}, **cash)
+    db.append(c, kind="approval.granted", entity="billpayment:BP-1", payload={}, actor="ctl", role="controller",
+              on_behalf_of="human:controller")
+    import pytest
+    with pytest.raises(db.LedgerError, match="already approved"):
+        db.append(c, kind="approval.requested", entity="billpayment:BP-1", payload={}, **cash)
+    db.append(c, kind="billpayment.drafted", entity="billpayment:BP-1", payload={"amount": 12}, **cash)  # re-drafted
+    db.append(c, kind="approval.requested", entity="billpayment:BP-1", payload={}, **cash)  # may ask again
