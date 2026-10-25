@@ -135,8 +135,11 @@ def suggest(conn, entity: str, workflow: str, req: dict) -> dict:
                 return {**base, "scenario": amendment["id"], "decision": "approve" if ok else "reject",
                         "note": "Approved: add-on order for the amendment." if ok else
                                 f"The add-on order should be exactly: {_fmt(amendment['expect']['addon_so'])}."}
+            if so == sos[0] and len(sos) > 1:
+                return {**base, "also": [], "scenario": amendment["id"], "decision": "approve",
+                        "note": f"Settled: the amendment is covered by add-on order {sos[1]}. {so} stays as invoiced; no change."}
             if posted_then_amended:
-                return {**base, "scenario": amendment["id"], "decision": "reject",
+                return {**base, "also": [], "scenario": amendment["id"], "decision": "reject",
                         "note": amendment["expect"]["controller_rejects_amendment"]}
         if exp.get("so") and so:
             if _lines(sop.get("lines")) == _expect_lines(exp["so"]):
@@ -183,11 +186,21 @@ def decidable(conn, entity: str) -> str | None:
     return None
 
 
+def answered(conn, entity: str) -> str | None:
+    req = conn.execute("SELECT MAX(seq) FROM events WHERE entity = ? AND kind = 'approval.requested'", (entity,)).fetchone()[0]
+    if req and conn.execute("SELECT 1 FROM events WHERE entity = ? AND kind IN ('approval.granted','approval.rejected')"
+                            " AND seq > ?", (entity, req)).fetchone():
+        return "already answered since its latest request"
+    return None
+
+
 def decide(conn, entity: str, decision: str, note: str, also: list[str] | None = None, supersede: bool = False) -> list[dict]:
     kind = "approval.granted" if decision == "approve" else "approval.rejected"
     out = []
     for e in [entity] + [a for a in (also or []) if a != entity]:
-        why = None if supersede else decidable(conn, e)
+        # The item that asked is always answerable (unless already answered since it asked);
+        # items riding along on the decision are skipped if posted or already decided.
+        why = None if supersede else (answered(conn, e) if e == entity else decidable(conn, e))
         if why:
             out.append({"entity": e, "skipped": why})
             continue

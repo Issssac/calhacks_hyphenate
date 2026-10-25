@@ -126,6 +126,9 @@ WHERE l.rel = 'from_quote'
   AND EXISTS (SELECT 1 FROM events e WHERE e.entity = l.dst AND e.kind = 'quote.amended' AND e.seq > l.seq)
   AND NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = l.src AND e.kind = 'so.amended'
                   AND e.seq > (SELECT MAX(a.seq) FROM events a WHERE a.entity = l.dst AND a.kind = 'quote.amended'))
+  -- settled by an add-on order raised for the same quote after the amendment (the original was already invoiced)
+  AND NOT EXISTS (SELECT 1 FROM doc_links x WHERE x.rel = 'from_quote' AND x.dst = l.dst AND x.src <> l.src
+                  AND x.seq > (SELECT MAX(a.seq) FROM events a WHERE a.entity = l.dst AND a.kind = 'quote.amended'))
 UNION ALL
 -- orders: drafted SOs/POs that are approved but not yet confirmed in the books
 SELECT CASE s.entity_type WHEN 'billpayment' THEN 'cash' ELSE 'orders' END,

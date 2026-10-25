@@ -96,7 +96,8 @@ def score_scenario(conn, s: dict, sim: dict) -> dict:
             add("intake: extracted", PASS if ok else PENDING, ", ".join(qkinds))
 
     exp = effective_expect(s, "quote.amended" in qkinds)
-    so = (_children(conn, quote, "from_quote", "so") or [None])[-1] if quote else None
+    # The scenario's own order is the first one raised from its quote; later ones are add-ons (e.g. S06's).
+    so = (_children(conn, quote, "from_quote", "so") or [None])[0] if quote else None
     if exp.get("so"):
         if not so:
             add("sales order", PENDING, "no SO yet")

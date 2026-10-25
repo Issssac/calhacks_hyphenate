@@ -91,10 +91,18 @@ def s04_s08_status(c) -> dict:
         qs = children(c, mail, "from_mail", "quote")
         q = qs[-1] if qs else None
     so = (children(c, q, "from_quote", "so") or [None])[0] if q else None
+    out["s04_so"] = so
     if so and last(c, so, "approval.rejected"):
         out["s04_rejected"] = True
-    out["revision_adopted"] = bool(db.rows(c, "SELECT 1 FROM events e WHERE e.kind = 'workflow.adopted' AND e.entity = 'workflow:orders'"
-                                              " AND EXISTS (SELECT 1 FROM doc_links l WHERE l.seq = e.seq AND l.rel = 'addresses')"))
+    # The lesson must be learned through the workflow: feedback about S04's order, and a revision adopted for it.
+    fb = [r["entity"] for r in db.rows(c, "SELECT DISTINCT e.entity FROM events e JOIN doc_links l ON l.seq = e.seq"
+                                          " WHERE e.kind = 'feedback.recorded' AND l.rel = 'about' AND l.dst = ?", [so])] if so else []
+    fb += [r["entity"] for r in db.rows(c, "SELECT entity FROM events WHERE kind = 'feedback.recorded'"
+                                           " AND json_extract(payload, '$.target') = ?", [so])] if so else []
+    out["s04_feedback"] = sorted(set(fb))
+    out["revision_adopted"] = bool(out["s04_feedback"]) and bool(db.rows(
+        c, "SELECT 1 FROM doc_links WHERE rel = 'addresses' AND kind = 'workflow.adopted' AND dst IN (%s)"
+           % ",".join("?" * len(out["s04_feedback"])), out["s04_feedback"]))
     mail8 = scenario_mail(c, "S08")
     if mail8:
         q8 = (children(c, mail8, "from_mail", "quote") or [None])[-1]
@@ -212,21 +220,23 @@ def gate(c) -> None:
 def learn(c) -> None:
     title("SELF-CORRECTION  -  the desk rewrites its own workflow after being overruled  (S04 -> S08)")
     st = s04_s08_status(c)
-    f = db.rows(c, "SELECT entity, payload FROM events WHERE kind = 'feedback.recorded' AND json_extract(payload,'$.driver') = 'orders'"
-                   " ORDER BY seq")
+    fb_ids = st.get("s04_feedback") or []
+    f = db.rows(c, "SELECT entity, payload FROM events WHERE kind = 'feedback.recorded' AND entity IN (%s) ORDER BY seq"
+                % ",".join("?" * len(fb_ids)), fb_ids) if fb_ids else []
     if f:
         say(f"1. The controller rejected a sales order. Feedback recorded ({f[0]['entity']}):")
         say(f"\"{f[0]['payload'].get('note')}\"", indent=6)
     else:
         say("1. (S04 has not been rejected yet in this run.)")
-    prop = db.rows(c, "SELECT payload FROM events WHERE kind = 'workflow.proposed' AND entity = 'workflow:orders' ORDER BY seq DESC LIMIT 1")
+    prop = db.rows(c, "SELECT e.payload FROM events e JOIN doc_links l ON l.seq = e.seq WHERE e.kind = 'workflow.proposed'"
+                      " AND l.rel = 'addresses' AND l.dst = ? ORDER BY e.seq DESC LIMIT 1", [f[0]["entity"]]) if f else []
     if prop:
         p = prop[0]["payload"]
         say("")
         say("2. The orders agent diagnosed its own workflow and proposed a revision:")
         say(str(p.get("diagnosis") or p.get("summary"))[:500], indent=6)
-    ad = db.rows(c, "SELECT payload FROM events e WHERE kind = 'workflow.adopted' AND entity = 'workflow:orders'"
-                    " AND EXISTS (SELECT 1 FROM doc_links l WHERE l.seq = e.seq AND l.rel = 'addresses') ORDER BY seq DESC LIMIT 1")
+    ad = db.rows(c, "SELECT e.payload FROM events e JOIN doc_links l ON l.seq = e.seq WHERE e.kind = 'workflow.adopted'"
+                    " AND l.rel = 'addresses' AND l.dst = ? ORDER BY e.seq DESC LIMIT 1", [f[0]["entity"]]) if f else []
     if ad:
         a = ad[0]["payload"]
         say("")
@@ -289,9 +299,10 @@ def check() -> int:
     c = conn()
     st = s04_s08_status(c)
     say("Segments ready now: moment, what, gate, proof, phish, close.")
-    say(f"learn (S04 -> S08):  S04 rejected: {st['s04_rejected']}   revision adopted: {st['revision_adopted']}   "
-        f"S08 caught without the controller: {st['s08_caught']}")
-    say("learn is ready to record." if all(st.values()) else "learn is NOT ready yet: wait for the current run to reach S08.")
+    say(f"learn (S04 -> S08):  S04 rejected: {st['s04_rejected']}   feedback recorded: {bool(st['s04_feedback'])}   "
+        f"revision adopted for it: {st['revision_adopted']}   S08 caught without the controller: {st['s08_caught']}")
+    ready = st["s04_rejected"] and st["revision_adopted"] and st["s08_caught"]
+    say("learn is ready to record." if ready else "learn is NOT ready yet: the S04 lesson hasn't gone through the workflow.")
     return 0
 
 

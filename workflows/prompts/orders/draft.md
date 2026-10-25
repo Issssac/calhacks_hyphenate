@@ -6,8 +6,16 @@ Start from the quote's latest extraction: `python -m ledgerdb state <quote>`, us
 **Sales order.** `python -m ledgerdb next-id so SO --actor <you> --role <role>`. Payload (see `connectors/odoo.py`):
 `{"customer", "customer_email", "customer_ref", "lines": [{"item", "description", "qty",
 "unit_price", "source"}], "total"}`. Prices and quantities come from the quote, each line keeping
-its `source`. Record `so.drafted` with `--link from_quote=<quote>`. For an amendment, record
-`so.amended` on the existing SO with the whole revised order.
+its `source`. Record `so.drafted` with `--link from_quote=<quote>`. For an amendment, first check whether
+the existing SO has been confirmed (`python -m ledgerdb state <so>` shows an `erp.posted`, or
+`python -m connectors.odoo read sale.order '[["name","=","<S000nn>"]]' state invoice_status`).
+If it is still a draft, record `so.amended` on it with the whole revised order. If it is
+**already confirmed** (and especially if invoiced or paid), do **not** touch it: it cannot be
+restaged and rewriting its ledger record leaves it disagreeing with Odoo. Instead draft a new
+add-on SO holding only the added or increased lines (the difference in quantity, at the quote's
+unit price), with `--link from_quote=<quote> --link amends=<so>`, and a matching add-on PO for
+the extra quantity. Say in the approval request that it is a delta, that its total will not tie
+to the amended quote total, and what the whole order now comes to.
 
 **Purchase orders.** Group lines by supplier and draft one PO per supplier. Find each line's
 cost and supplier in this order:
