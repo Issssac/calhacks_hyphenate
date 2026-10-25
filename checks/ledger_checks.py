@@ -441,7 +441,11 @@ def orders_posted(*_a: Any, **_k: Any) -> bool:
     else:
         targets = ([so] if so else []) + pos
     missing = [t for t in targets if not _posted_after_def(conn, t)]
-    return _record(conn, "orders_posted", bool(targets) and not missing, {"targets": targets, "not_posted": missing})
+    # Also passes when nothing anywhere is approved and waiting to be posted, so moving the focus on
+    # to the next item can't strand the agent here. Any approved, unposted SO or PO keeps it failing.
+    waiting = [r["entity"] for r in _queue(conn, "orders") if r["reason"] == "approved, needs posting"]
+    ok = (bool(targets) and not missing) or not waiting
+    return _record(conn, "orders_posted", ok, {"targets": targets, "not_posted": missing, "waiting": waiting})
 
 
 # ---------------------------------------------------------------- billing
