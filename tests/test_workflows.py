@@ -137,6 +137,19 @@ def test_version_lifecycle(conn, tmp_path, monkeypatch):
     assert db.rows(conn, "SELECT version FROM workflow_current")[0]["version"] == 2
 
 
+def test_ledger_decisions_move_the_driver(conn):
+    db.append(conn, kind="so.drafted", entity="so:SO-1", payload={"total": 1}, **ORD)
+    assert not lc.orders_awaiting_controller_review()
+    db.append(conn, kind="approval.requested", entity="so:SO-1",
+              payload={"review_state": "controller_review", "items": ["so:SO-1"]}, **ORD)
+    assert lc.orders_awaiting_controller_review()
+    assert not lc.orders_decision_approved() and not lc.orders_decision_rejected()
+    db.append(conn, actor="controller-agent", role="controller", on_behalf_of="model:controller",
+              kind="approval.rejected", entity="so:SO-1", payload={"note": "contract price"})
+    assert lc.orders_decision_rejected() and not lc.orders_decision_approved()
+    assert not lc.orders_awaiting_controller_review()
+
+
 def test_reject_closes_feedback(conn, tmp_path, monkeypatch):
     monkeypatch.setattr(build, "PROPOSED", tmp_path / "proposed")
     ctx = {"actor": "orders-agent", "role": "orders", "workflow": "orders"}
@@ -145,9 +158,10 @@ def test_reject_closes_feedback(conn, tmp_path, monkeypatch):
     assert lc.orders_feedback_closed()
 
 
-def test_every_template_references_real_checks():
-    for d in build.DRIVERS:
-        spec = build.template(d)
+@pytest.mark.parametrize("mode", build.APPROVAL_MODES)
+def test_every_template_references_real_checks(mode):
+    specs = [build.template(d, mode) for d in build.DRIVERS] + [build.controller_template(), build.architect_template()]
+    for spec in specs:
         for st in spec["states"].values():
             for t in st.get("transitions", []):
                 if t["kind"] == "hard":

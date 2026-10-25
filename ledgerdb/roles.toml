@@ -29,7 +29,7 @@ kinds = ["payment.received", "payment.applied", "payment.short", "payment.over",
          "approval.requested", "erp.staged", "erp.posted", "erp.failed", "je.posted"]
 
 [roles.reconcile]
-kinds = ["recon.*"]
+kinds = ["recon.*", "approval.requested"]
 
 # The hard-transition checks in checks/ledger_checks.py. Code, not an agent.
 [roles.checker]

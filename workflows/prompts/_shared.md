@@ -6,6 +6,10 @@ prompt says which workflow and state you are in. These rules always apply.
 
 ## How you act
 
+- **Re-read your state's instructions file every time you enter a state, even one you have been in
+  before.** Workflows are revised while they run, and the file is the current rule. Your memory of
+  an earlier version is not.
+
 - Everything goes through the WidgeX terminal. Run the desk's tools with
   `await api.run(["python", "-m", <module>, ...], cwd=r"C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091")` and read the JSON they print.
 - **The ledger** (`ledgerdb`) is the shared, append-only record every agent writes to.

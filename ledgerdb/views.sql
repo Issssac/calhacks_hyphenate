@@ -137,6 +137,15 @@ WHERE s.entity_type IN ('so', 'po', 'billpayment')
                   AND e.seq > (SELECT MAX(d.seq) FROM events d WHERE d.entity = s.entity
                                AND (d.kind LIKE '%.drafted' OR d.kind LIKE '%.amended')))
 UNION ALL
+-- orders: drafted SOs nobody has asked the controller about (e.g. drafted before a restart)
+SELECT 'orders', s.entity, 'needs approval request', s.last_seq
+FROM doc_state s
+WHERE s.entity_type = 'so'
+  AND NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity
+                  AND e.kind IN ('approval.requested', 'approval.granted', 'approval.rejected', 'so.cancelled')
+                  AND e.seq > (SELECT MAX(d.seq) FROM events d WHERE d.entity = s.entity
+                               AND (d.kind LIKE '%.drafted' OR d.kind LIKE '%.amended')))
+UNION ALL
 -- billing: posted SOs with no invoice
 SELECT 'billing', s.entity, 'needs invoice', s.last_seq
 FROM doc_state s

@@ -47,7 +47,7 @@ PROMPTS = ROOT / "workflows" / "prompts"
 CHECKS = "checks/ledger_checks.py"
 DRIVERS = ("intake", "orders", "billing", "cash", "reconcile")
 ROLE = {"intake": "intake", "orders": "orders", "billing": "billing", "cash": "cash", "reconcile": "reconcile",
-        "architect": "architect"}
+        "architect": "architect", "controller": "controller"}
 TAIL = ("overruled", "revise", "adopt", "promote")
 
 
@@ -78,8 +78,61 @@ def human(to: str, p: int, q: str, decision: str) -> dict:
 
 
 def review(approve_to: str, approve_q: str, reject_to: str, reject_q: str) -> dict:
-    return {"review": {}, "transitions": [human(approve_to, 10, approve_q, "approve"),
-                                          human(reject_to, 20, reject_q, "reject")]}
+    """A point where the controller decides. Rendered per approval mode in _finish()."""
+    return {"_review": (approve_to, approve_q, reject_to, reject_q)}
+
+
+# How the controller decides:
+#   human   a WidgeX review card (a person clicks Approve / Send back on the Harnesses page)
+#   ledger  the driver records approval.requested and waits; the controller (a person through
+#           `python -m bench.controller decide`, or the benchmark controller agent) records
+#           approval.granted / approval.rejected, and a code check moves the driver on.
+APPROVAL_MODES = ("human", "ledger")
+
+LEDGER_RULES = (
+    "\nApprovals in this desk run through the ledger: there is no review card. Never record approval.granted "
+    "or approval.rejected yourself. The controller does, as itself. Skip any step that tells you to record "
+    "them on the controller's behalf, and read the controller's note from its approval event "
+    "(`python -m ledgerdb state <entity>`).")
+
+
+def _review_pointer(driver: str, state: str) -> str:
+    return (
+        "\nThis is a controller decision point. If you came here from `begin`, a request is already open: "
+        "find it with `python -m ledgerdb query \"SELECT entity, payload FROM events WHERE kind='approval.requested' "
+        f"AND workflow='{driver}' ORDER BY seq DESC LIMIT 1\"`, focus on its item, and skip to waiting. Otherwise, do what "
+        "the instructions file says to prepare the request, and record it once on the item being decided: "
+        f"`--kind approval.requested` with the payload `{{\"review_state\": \"{state}\", \"summary\": \"<what you'd tell the controller>\", "
+        "\"items\": [<every entity the decision covers, e.g. the SO and its POs>], \"recommendation\": \"...\"}`. "
+        "Then wait 60 seconds (`await asyncio.sleep(60)`), check the item for an approval.granted or approval.rejected "
+        "newer than your request, and answer the questions. Until the controller decides, answer both false. "
+        "You'll stay here and check again.")
+
+
+def _finish(driver: str, states: dict[str, dict], mode: str) -> dict[str, dict]:
+    """Render review states for the approval mode, and add prompts."""
+    reviews = [n for n, st in states.items() if "_review" in st]
+    for name in reviews:
+        a_to, a_q, r_to, r_q = states[name].pop("_review")
+        if mode == "human":
+            states[name].update({"review": {}, "transitions": [human(a_to, 10, a_q, "approve"),
+                                                                human(r_to, 20, r_q, "reject")]})
+        else:
+            states[name]["transitions"] = [
+                hard(a_to, 10, f"Has the controller approved it (approval.granted after your request)? ({a_q})",
+                     f"{driver}_decision_approved"),
+                hard(r_to, 20, f"Has the controller rejected it (approval.rejected after your request)? ({r_q})",
+                     f"{driver}_decision_rejected")]
+    if mode == "ledger" and "begin" in states and driver in DRIVERS:
+        # A restarted driver goes straight back to any decision it is still waiting on.
+        for i, name in enumerate(reviews):
+            states["begin"]["transitions"].insert(
+                1 + i, hard(name, 6 + i, f"Is one of your requests still waiting on the controller at `{name}`?",
+                            f"{driver}_awaiting_{name}"))
+    for name, st in states.items():
+        st["prompt"] = _pointer(driver, name) + (LEDGER_RULES if mode == "ledger" else "") + \
+            (_review_pointer(driver, name) if mode == "ledger" and name in reviews else "")
+    return states
 
 
 def _feedback_edge(driver: str) -> dict:
@@ -111,7 +164,7 @@ def _tail(driver: str) -> dict[str, dict]:
     }
 
 
-def template(driver: str) -> dict:
+def template(driver: str, mode: str = "human") -> dict:
     d = driver
     if d == "intake":
         states = {
@@ -215,12 +268,25 @@ def template(driver: str) -> dict:
     else:
         raise ValueError(f"no template for {driver!r}")
     states.update(_tail(d))
-    for name, st in states.items():
-        st["prompt"] = _pointer(d, name)
+    states = _finish(d, states, mode)
     ordered = {"begin": states.pop("begin"), **states}
     for name, st in ordered.items():
         ordered[name] = {"prompt": st["prompt"], **{k: v for k, v in st.items() if k != "prompt"}}
     return {"version": 2, "name": d, "description": f"Revenue desk {d} driver", "states": ordered}
+
+
+def controller_template() -> dict:
+    """Benchmark stand-in for the human controller: answers ledger approval requests from the answer key."""
+    states = {
+        "begin": {"transitions": [
+            hard("done", 10, "Is the whole desk idle, with no approval request left open?", "controller_idle")]},
+        "done": {"terminal": True, "transitions": []},
+    }
+    states = _finish("controller", states, "human")
+    return {"version": 2, "name": "controller",
+            "description": "Benchmark controller: decides approval requests from the answer key",
+            "states": {n: {"prompt": s["prompt"], **{k: v for k, v in s.items() if k != "prompt"}}
+                       for n, s in states.items()}}
 
 
 def architect_template() -> dict:
@@ -241,8 +307,7 @@ def architect_template() -> dict:
             soft("done", 10, "Did you promote every driver and start its agent, or rest because starting was refused?")]},
         "done": {"terminal": True, "transitions": []},
     }
-    for name, st in states.items():
-        st["prompt"] = _pointer("architect", name)
+    states = _finish("architect", states, "human")
     out = {}
     for name, st in states.items():
         out[name] = {"prompt": st["prompt"], **{k: v for k, v in st.items() if k != "prompt"}}
@@ -264,12 +329,20 @@ def current_version(conn, driver: str) -> int:
     return int(row[0]) if row and row[0] is not None else 0
 
 
-def compile_(drivers: list[str]) -> list[dict]:
+def approval_mode() -> str:
+    pipeline = ROOT / "structure" / "pipeline.json"
+    mode = json.loads(pipeline.read_text(encoding="utf-8")).get("approvals", "human") if pipeline.exists() else "human"
+    return mode if mode in APPROVAL_MODES else "human"
+
+
+def compile_(drivers: list[str], from_template: bool = False, mode: str | None = None) -> list[dict]:
     PROPOSED.mkdir(parents=True, exist_ok=True)
+    mode = mode or approval_mode()
     out = []
     for d in drivers:
         src = live_path(d)
-        spec = json.loads(src.read_text(encoding="utf-8")) if src.exists() else template(d)
+        spec = (json.loads(src.read_text(encoding="utf-8")) if src.exists() and not from_template
+                else template(d, mode))
         dest = PROPOSED / f"{d}.json"
         dest.write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
         out.append({"driver": d, "from": "live" if src.exists() else "template", "path": str(dest),
@@ -360,6 +433,9 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("compile")
     c.add_argument("drivers", nargs="*")
+    c.add_argument("--from-template", action="store_true",
+                   help="rebuild from the template (e.g. after changing the approval mode), not the live version")
+    c.add_argument("--approvals", choices=APPROVAL_MODES, help="default: structure/pipeline.json 'approvals'")
 
     def ctx_args(sp):
         sp.add_argument("--actor", required=True)
@@ -381,6 +457,7 @@ def main(argv: list[str] | None = None) -> int:
     rj.add_argument("--reason", required=True)
     sub.add_parser("current")
     sub.add_parser("architect", help="(re)write .widgex/harnesses/architect.json")
+    sub.add_parser("controller", help="(re)write .widgex/harnesses/controller.json (benchmark controller)")
     args = p.parse_args(argv)
     out = lambda o: sys.stdout.write((o if isinstance(o, str) else json.dumps(o, indent=2, default=str)) + "\n")
 
@@ -388,15 +465,16 @@ def main(argv: list[str] | None = None) -> int:
         pipeline = ROOT / "structure" / "pipeline.json"
         drivers = args.drivers or ([d["name"] for d in json.loads(pipeline.read_text(encoding="utf-8"))["drivers"]
                                     if d.get("enabled", True)] if pipeline.exists() else list(DRIVERS))
-        out(compile_(drivers))
+        out(compile_(drivers, args.from_template, args.approvals))
         return 0
     if args.cmd == "diff":
         out(diff(args.driver))
         return 0
-    if args.cmd == "architect":
+    if args.cmd in ("architect", "controller"):
         HARNESS_DIR.mkdir(parents=True, exist_ok=True)
-        path = HARNESS_DIR / "architect.json"
-        path.write_text(json.dumps(architect_template(), indent=2) + "\n", encoding="utf-8")
+        path = HARNESS_DIR / f"{args.cmd}.json"
+        spec = architect_template() if args.cmd == "architect" else controller_template()
+        path.write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
         out({"path": str(path), "sha256": sha(path)})
         return 0
     conn = db.connect()

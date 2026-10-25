@@ -1,0 +1,220 @@
+{
+  "version": 2,
+  "name": "intake",
+  "description": "Revenue desk intake driver (v1)",
+  "states": {
+    "begin": {
+      "prompt": "Revenue desk / workflow `intake` / state `begin`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/intake/begin.md and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `intake-agent` with role `intake`; pass --workflow intake on every ledger write.",
+      "transitions": [
+        {
+          "to": "revise",
+          "precedence": 5,
+          "kind": "hard",
+          "question": "Is there open feedback for this workflow (`python -m ledgerdb feedback`)?",
+          "check": {
+            "file": "checks/ledger_checks.py",
+            "function": "intake_has_feedback"
+          }
+        },
+        {
+          "to": "classify",
+          "precedence": 10,
+          "kind": "hard",
+          "question": "Did you pick an item from the intake queue and record it as your focus?",
+          "check": {
+            "file": "checks/ledger_checks.py",
+            "function": "intake_focus_set"
+          }
+        },
+        {
+          "to": "wait",
+          "precedence": 20,
+          "kind": "hard",
+          "question": "Is the intake queue empty after pulling new mail?",
+          "check": {
+            "file": "checks/ledger_checks.py",
+            "function": "intake_queue_empty"
+          }
+        }
+      ]
+    },
+    "classify": {
+      "prompt": "Revenue desk / workflow `intake` / state `classify`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/intake/classify.md and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `intake-agent` with role `intake`; pass --workflow intake on every ledger write.",
+      "transitions": [
+        {
+          "to": "extract",
+          "precedence": 10,
+          "kind": "soft",
+          "question": "Is the focus a customer quote or amendment that now needs extracting?"
+        },
+        {
+          "to": "begin",
+          "precedence": 20,
+          "kind": "hard",
+          "question": "Was it something else, now classified and handed off?",
+          "check": {
+            "file": "checks/ledger_checks.py",
+            "function": "intake_handled"
+          }
+        }
+      ]
+    },
+    "extract": {
+      "prompt": "Revenue desk / workflow `intake` / state `extract`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/intake/extract.md and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `intake-agent` with role `intake`; pass --workflow intake on every ledger write.",
+      "transitions": [
+        {
+          "to": "begin",
+          "precedence": 10,
+          "kind": "hard",
+          "question": "Did you record a clean quote.extracted with every line cited?",
+          "check": {
+            "file": "checks/ledger_checks.py",
+            "function": "intake_extracted"
+          }
+        },
+        {
+          "to": "clarify",
+          "precedence": 20,
+          "kind": "soft",
+          "question": "Did you record a quote.conflict that needs the controller to decide?"
+        }
+      ]
+    },
+    "clarify": {
+      "prompt": "Revenue desk / workflow `intake` / state `clarify`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/intake/clarify.md and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `intake-agent` with role `intake`; pass --workflow intake on every ledger write.",
+      "review": {},
+      "transitions": [
+        {
+          "to": "resolve",
+          "precedence": 10,
+          "kind": "human",
+          "decision": "approve",
+          "question": "Accept the agent's recommended resolution of this conflict?"
+        },
+        {
+          "to": "overruled",
+          "precedence": 20,
+          "kind": "human",
+          "decision": "reject",
+          "question": "Reject the recommendation (write the correct values in the note)?"
+        }
+      ]
+    },
+    "resolve": {
+      "prompt": "Revenue desk / workflow `intake` / state `resolve`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/intake/resolve.md and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `intake-agent` with role `intake`; pass --workflow intake on every ledger write.",
+      "transitions": [
+        {
+          "to": "begin",
+          "precedence": 10,
+          "kind": "hard",
+          "question": "Did you record quote.clarified with the approved resolution?",
+          "check": {
+            "file": "checks/ledger_checks.py",
+            "function": "intake_extracted"
+          }
+        }
+      ]
+    },
+    "overruled": {
+      "prompt": "Revenue desk / workflow `intake` / state `overruled`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/intake/overruled.md if it exists, otherwise C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_tail/overruled.md, and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `intake-agent` with role `intake`; pass --workflow intake on every ledger write.",
+      "transitions": [
+        {
+          "to": "revise",
+          "precedence": 10,
+          "kind": "hard",
+          "question": "Did you apply the controller's correction to the item and record feedback.recorded?",
+          "check": {
+            "file": "checks/ledger_checks.py",
+            "function": "intake_has_feedback"
+          }
+        }
+      ]
+    },
+    "revise": {
+      "prompt": "Revenue desk / workflow `intake` / state `revise`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/intake/revise.md if it exists, otherwise C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_tail/revise.md, and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `intake-agent` with role `intake`; pass --workflow intake on every ledger write.",
+      "transitions": [
+        {
+          "to": "adopt",
+          "precedence": 10,
+          "kind": "hard",
+          "question": "Did you write a revision, check it with api.harness_check and record workflow.proposed and workflow.validated for that exact file?",
+          "check": {
+            "file": "checks/ledger_checks.py",
+            "function": "intake_proposal_valid"
+          }
+        },
+        {
+          "to": "begin",
+          "precedence": 20,
+          "kind": "hard",
+          "question": "Did you decide no workflow change is needed and record workflow.rejected answering the feedback?",
+          "check": {
+            "file": "checks/ledger_checks.py",
+            "function": "intake_feedback_closed"
+          }
+        }
+      ]
+    },
+    "adopt": {
+      "prompt": "Revenue desk / workflow `intake` / state `adopt`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/intake/adopt.md if it exists, otherwise C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_tail/adopt.md, and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `intake-agent` with role `intake`; pass --workflow intake on every ledger write.",
+      "review": {},
+      "transitions": [
+        {
+          "to": "promote",
+          "precedence": 10,
+          "kind": "human",
+          "decision": "approve",
+          "question": "Adopt this revision of the workflow?"
+        },
+        {
+          "to": "revise",
+          "precedence": 20,
+          "kind": "human",
+          "decision": "reject",
+          "question": "Send it back for another revision (say what is wrong in the note)?"
+        }
+      ]
+    },
+    "promote": {
+      "prompt": "Revenue desk / workflow `intake` / state `promote`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/intake/promote.md if it exists, otherwise C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_tail/promote.md, and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `intake-agent` with role `intake`; pass --workflow intake on every ledger write.",
+      "transitions": [
+        {
+          "to": "begin",
+          "precedence": 10,
+          "kind": "hard",
+          "question": "Did you run `python -m workflows.build promote` and does it report the new version?",
+          "check": {
+            "file": "checks/ledger_checks.py",
+            "function": "intake_feedback_closed"
+          }
+        }
+      ]
+    },
+    "wait": {
+      "prompt": "Revenue desk / workflow `intake` / state `wait`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/intake/wait.md if it exists, otherwise C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_tail/wait.md, and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `intake-agent` with role `intake`; pass --workflow intake on every ledger write.",
+      "transitions": [
+        {
+          "to": "done",
+          "precedence": 10,
+          "kind": "hard",
+          "question": "Has the whole desk been idle long enough to stop (see policy idle_minutes)?",
+          "check": {
+            "file": "checks/ledger_checks.py",
+            "function": "desk_idle"
+          }
+        },
+        {
+          "to": "begin",
+          "precedence": 20,
+          "kind": "soft",
+          "question": "Have you waited, and are you ready to look for work again?"
+        }
+      ]
+    },
+    "done": {
+      "prompt": "Revenue desk / workflow `intake` / state `done`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/intake/done.md if it exists, otherwise C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_tail/done.md, and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `intake-agent` with role `intake`; pass --workflow intake on every ledger write.",
+      "terminal": true,
+      "transitions": []
+    }
+  }
+}

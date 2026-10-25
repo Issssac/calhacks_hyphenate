@@ -182,9 +182,61 @@ def proposal_ok(conn, driver: str) -> tuple[bool, dict]:
     return bool(row[0]), {"sha256": sha, "validated_ok": bool(row[0])}
 
 
+# ---- controller decisions through the ledger (approval mode "ledger")
+
+REVIEW_STATES = {"intake": ["clarify", "adopt"], "orders": ["controller_review", "adopt"],
+                 "billing": ["invoice_review", "bill_review", "adopt"],
+                 "cash": ["cash_review", "payment_review", "adopt"], "reconcile": ["report", "adopt"]}
+
+
+def latest_request(conn, driver: str, state: str | None = None) -> tuple[int, str, dict] | None:
+    sql = "SELECT seq, entity, payload FROM events WHERE kind = 'approval.requested' AND workflow = ?"
+    params: list = [driver]
+    if state:
+        sql += " AND json_extract(payload, '$.review_state') = ?"
+        params.append(state)
+    row = conn.execute(sql + " ORDER BY seq DESC LIMIT 1", params).fetchone()
+    return (row[0], row[1], json.loads(row[2])) if row else None
+
+
+def decision_after(conn, entity: str, seq: int) -> tuple[str, dict] | None:
+    row = conn.execute("SELECT kind, payload FROM events WHERE entity = ? AND seq > ?"
+                       " AND kind IN ('approval.granted', 'approval.rejected') ORDER BY seq DESC LIMIT 1",
+                       (entity, seq)).fetchone()
+    return (row[0], json.loads(row[1])) if row else None
+
+
+def _decision(driver: str, want: str) -> Callable[..., bool]:
+    def check(*_a: Any, **_k: Any) -> bool:
+        conn = _conn()
+        req = latest_request(conn, driver)
+        dec = decision_after(conn, req[1], req[0]) if req else None
+        ok = bool(dec) and dec[0] == want
+        return _record(conn, check.__name__, ok, {"request": req and {"seq": req[0], "entity": req[1]},
+                                                  "decision": dec and dec[0]})
+    check.__name__ = f"{driver}_decision_{'approved' if want == 'approval.granted' else 'rejected'}"
+    return check
+
+
+def _awaiting(driver: str, state: str) -> Callable[..., bool]:
+    def check(*_a: Any, **_k: Any) -> bool:
+        conn = _conn()
+        req = latest_request(conn, driver, state)
+        ok = bool(req) and decision_after(conn, req[1], req[0]) is None
+        return _record(conn, check.__name__, ok, {"request": req and {"seq": req[0], "entity": req[1]}})
+    check.__name__ = f"{driver}_awaiting_{state}"
+    return check
+
+
 for _d in DRIVERS:
     for _factory in (_queue_empty, _focus_set, _has_feedback, _feedback_closed, _proposal_valid):
         _fn = _factory(_d)
+        globals()[_fn.__name__] = _fn
+    for _want in ("approval.granted", "approval.rejected"):
+        _fn = _decision(_d, _want)
+        globals()[_fn.__name__] = _fn
+    for _st in REVIEW_STATES[_d]:
+        _fn = _awaiting(_d, _st)
         globals()[_fn.__name__] = _fn
 
 
@@ -269,7 +321,8 @@ def orders_focus_is_approved(*_a: Any, **_k: Any) -> bool:
 def orders_focus_is_quote(*_a: Any, **_k: Any) -> bool:
     conn = _conn()
     f = focus(conn, "orders")
-    ok = any(r["entity"] == f and r["reason"] in ("needs sales order", "quote amended after SO")
+    ok = any(r["entity"] == f and r["reason"] in ("needs sales order", "quote amended after SO",
+                                                  "needs approval request")
              for r in _queue(conn, "orders"))
     return _record(conn, "orders_focus_is_quote", ok, {"focus": f})
 
@@ -521,6 +574,17 @@ def desk_idle(*_a: Any, **_k: Any) -> bool:
     open_work = {d: len(_actionable(conn, d)) for d in DRIVERS if d != "reconcile"}
     ok = busy == 0 and not any(open_work.values())
     return _record(conn, "desk_idle", ok, {"events_in_window": busy, "minutes": minutes, "open": open_work})
+
+
+def controller_idle(*_a: Any, **_k: Any) -> bool:
+    """Benchmark controller may stop: no open approval request, and the desk is idle."""
+    conn = _conn()
+    open_reqs = 0
+    for ent, seq in conn.execute("SELECT entity, MAX(seq) FROM events WHERE kind = 'approval.requested' GROUP BY entity"):
+        if decision_after(conn, ent, seq) is None:
+            open_reqs += 1
+    idle = desk_idle()
+    return _record(conn, "controller_idle", open_reqs == 0 and idle, {"open_requests": open_reqs, "desk_idle": idle})
 
 
 # ---------------------------------------------------------------- architect

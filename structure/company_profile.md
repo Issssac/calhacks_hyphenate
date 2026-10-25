@@ -14,7 +14,7 @@ Halyard Marine Supply (USD, US) resells marine hardware, rope and electronics to
 | Bank | 101401 Bank (journal BNK1); 101403 Outstanding Receipts, 101404 Outstanding Payments |
 | Journals | INV customer invoices, BILL vendor bills |
 
-Taxes: use **CA Sales 10.75%** (tax id 3) on sales; it is already set on all seven products. Never use the two generic 15% taxes (ids 1, 2). Vendor purchases carry no tax. No tax-exempt customers are known. Payment terms: none are set on any partner; default customer invoices to **30 Days** unless a quote states otherwise (assumption, see open questions). Products are invoiced on order and purchased on receipt.
+Taxes: use **CA Sales 10.75%** (tax id 3) on sales; it is already set on all seven products. Never use the two generic 15% taxes (ids 1, 2). Vendor purchases carry no tax. **Pier 39 Boatworks (partner 10) has the fiscal position "Resale exempt"** (odoo:account.fiscal.position/1, not auto-applied), which maps CA Sales 10.75% to no tax: its sales carry no tax and the position must be applied on its quotes and invoices. The other three customers have no fiscal position. No pricelists exist. Payment terms: none are set on any partner; default customer invoices to **30 Days** unless a quote states otherwise (assumption, see open questions). Products are invoiced on order and purchased on receipt.
 
 ## Customers
 | Name | Email | Terms | Tax |

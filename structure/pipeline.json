@@ -46,8 +46,10 @@
  ],
  "assumptions": [
   "Customer terms default to 30 Days",
-  "Tax 3 (CA 10.75%) applies to all customers",
+  "Tax 3 (CA 10.75%) applies to all customers except Pier 39 Boatworks, which has the 'Resale exempt' fiscal position (no tax)",
   "Drop folder substitutes for Gmail",
   "Vendors are paid on bill approval, not on terms"
- ]
+ ],
+ "approvals": "ledger",
+ "approvals_why": "Benchmark mode: a stand-in controller (bench/controller.py) answers from the answer key through the ledger."
 }

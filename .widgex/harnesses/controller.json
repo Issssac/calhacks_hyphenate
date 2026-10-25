@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "name": "controller",
+  "description": "Benchmark controller: decides approval requests from the answer key",
+  "states": {
+    "begin": {
+      "prompt": "Revenue desk / workflow `controller` / state `begin`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/controller/begin.md and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `controller-agent` with role `controller`; pass --workflow controller on every ledger write.",
+      "transitions": [
+        {
+          "to": "done",
+          "precedence": 10,
+          "kind": "hard",
+          "question": "Is the whole desk idle, with no approval request left open?",
+          "check": {
+            "file": "checks/ledger_checks.py",
+            "function": "controller_idle"
+          }
+        }
+      ]
+    },
+    "done": {
+      "prompt": "Revenue desk / workflow `controller` / state `done`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/controller/done.md if it exists, otherwise C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_tail/done.md, and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `controller-agent` with role `controller`; pass --workflow controller on every ledger write.",
+      "terminal": true,
+      "transitions": []
+    }
+  }
+}

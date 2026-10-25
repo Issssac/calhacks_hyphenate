@@ -9,5 +9,7 @@ controller approves before anything is confirmed. You never approve your own ord
    - `needs sales order`: an extracted quote with no SO yet
    - `quote amended after SO`: the customer changed the deal (the item is the SO)
    - `approved, needs posting`: approved but not yet confirmed in Odoo (finish it)
+   - `needs approval request`: an SO already drafted that nobody has asked the controller about.
+     Re-check it in `draft` (re-stage if needed), then ask.
 3. Empty: you are done. Otherwise take the **oldest** item and focus on it:
    `python -m ledgerdb focus orders <entity> --actor orders-agent --role orders`.
