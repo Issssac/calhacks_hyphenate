@@ -100,6 +100,8 @@ WHERE s.entity_type = 'banktxn'
   AND EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'bank.transaction'
               AND json_extract(e.payload, '$.direction') = 'in')
   AND NOT EXISTS (SELECT 1 FROM doc_links l WHERE l.rel = 'from_bank' AND l.dst = s.entity)
+  -- explained as not this run's customer money (e.g. the opening position after a reset)
+  AND NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'recon.explained')
 UNION ALL
 -- intake: quotes received but not yet extracted
 SELECT 'intake', s.entity, 'needs extraction', s.last_seq

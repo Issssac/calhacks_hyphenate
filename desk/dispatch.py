@@ -31,6 +31,7 @@ class FileQueue:
         return {"ok": True, "via": "file-queue", "detail": path.name}
 
 
+STALE_S = 180  # a running event untouched this long is treated as finished
 TOKENS = desk_home() / "hooks.json"   # {"hook-rdorders": "whk_…", …}: written by a person, never printed
 
 
@@ -68,7 +69,15 @@ class WidgeXHooks:
             r = requests.get(f"http://127.0.0.1:{self.port}/v1/events/{last_event}", timeout=5,
                              headers={"Authorization": f"Bearer {token}"})
             # Anything short of finished counts as busy: the agent hasn't read and rested on it yet.
-            return r.status_code == 200 and r.json().get("status") not in ("done", "rejected", "expired")
+            # Except a 'running' event that hasn't moved in STALE_S: WidgeX can leave an event at
+            # 'running' after its agent has rested (bug-mvnmcs…), and trusting it would park the desk.
+            if r.status_code != 200:
+                return False
+            ev = r.json()
+            if ev.get("status") in ("done", "rejected", "expired"):
+                return False
+            updated = (ev.get("updatedAt") or 0) / 1000
+            return time.time() - updated < STALE_S
         except Exception:
             return False
 
