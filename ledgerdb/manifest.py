@@ -31,7 +31,9 @@ CONTROL_FILES = [
     "connectors/odoo.py", "connectors/increase.py", "connectors/inbox.py", "connectors/gmail.py",
     "workflows/build.py", "recon.py",
     # Pricing: how a recommendation is computed. The agent supplies judgement calls; it can't change these.
-    "pricing/sourcing.py", "pricing/features.py", "pricing/model.py",
+    "pricing/sourcing.py", "pricing/features.py", "pricing/model.py", "pricing/send.py",
+    # Who may receive what, and how finance's emailed decision is read.
+    "connectors/mailer.py", "desk/finance_reply.py",
 ]
 
 

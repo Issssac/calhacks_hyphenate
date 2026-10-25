@@ -11,4 +11,5 @@ import tempfile
 os.environ["DESK_WORLD"] = "halyard"
 os.environ["DESK_SLUG"] = "revenue-desk"
 os.environ["DESK_HOOK_PREFIX"] = "hook-rd"
+os.environ["DESK_STRUCTURE"] = "structure"
 os.environ["REVENUE_DESK_HOME"] = tempfile.mkdtemp(prefix="revenue-desk-test-")

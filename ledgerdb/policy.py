@@ -7,9 +7,16 @@ looked at the books; adopted workflow revisions may change it too.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from .db import REPO_ROOT
+
+
+def structure_dir() -> Path:
+    """Where this desk's company files live (profile, policy, pipeline). One folder per company:
+    `structure/` for the first desk, e.g. `structure/redwood` for another (DESK_STRUCTURE in its .env)."""
+    return REPO_ROOT / os.environ.get("DESK_STRUCTURE", "structure")
 
 DEFAULT_POLICY = {
     "margin_floor": 0.15,          # (SO - POs) / SO, untaxed
@@ -23,7 +30,7 @@ DEFAULT_POLICY = {
 
 def policy() -> dict:
     out = dict(DEFAULT_POLICY)
-    p = REPO_ROOT / "structure" / "policy.json"
+    p = structure_dir() / "policy.json"
     if p.exists():
         out.update(json.loads(p.read_text(encoding="utf-8")))
     return out

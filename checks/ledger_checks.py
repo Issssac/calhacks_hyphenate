@@ -23,7 +23,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ledgerdb import db  # noqa: E402
-from ledgerdb.policy import policy, price_tolerance  # noqa: E402
+from ledgerdb.policy import policy, price_tolerance, structure_dir  # noqa: E402
 
 DRIVERS = ("intake", "orders", "billing", "cash", "reconcile")
 EPS = 0.005
@@ -654,10 +654,10 @@ def controller_idle(*_a: Any, **_k: Any) -> bool:
 def architect_profile_written(*_a: Any, **_k: Any) -> bool:
     conn = _conn()
     problems = []
-    for rel in ("structure/company_profile.md", "structure/policy.json", "structure/pipeline.json"):
-        p = ROOT / rel
+    for name in ("company_profile.md", "policy.json", "pipeline.json"):
+        p = structure_dir() / name
         if not p.exists() or p.stat().st_size < 20:
-            problems.append(f"{rel} missing or empty")
+            problems.append(f"{p.relative_to(ROOT).as_posix()} missing or empty")
     if not conn.execute("SELECT 1 FROM events WHERE kind LIKE 'structure.%' LIMIT 1").fetchone():
         problems.append("no structure.* events recorded")
     return _record(conn, "architect_profile_written", not problems, {"problems": problems})
@@ -665,7 +665,7 @@ def architect_profile_written(*_a: Any, **_k: Any) -> bool:
 
 def architect_all_validated(*_a: Any, **_k: Any) -> bool:
     conn = _conn()
-    pipeline = ROOT / "structure" / "pipeline.json"
+    pipeline = structure_dir() / "pipeline.json"
     drivers = [d["name"] for d in json.loads(pipeline.read_text(encoding="utf-8")).get("drivers", [])
                if d.get("enabled", True)] if pipeline.exists() else []
     results = {d: proposal_ok(conn, d) for d in drivers}

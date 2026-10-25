@@ -43,7 +43,10 @@ HARNESS_DIR = ROOT / ".widgex" / "harnesses"
 PROPOSED = ROOT / "workflows" / "proposed"
 HISTORY = ROOT / "workflows" / "history"
 PROMPTS = ROOT / "workflows" / "prompts"
-POLICY = ROOT / "structure" / "policy.json"
+from ledgerdb.policy import structure_dir  # noqa: E402
+
+STRUCTURE = structure_dir()
+POLICY = STRUCTURE / "policy.json"
 # WidgeX resolves check.file relative to the harness file's folder and refuses anything outside
 # it, so the workflows point at a shim in .widgex/harnesses/checks/ that loads checks/ledger_checks.py.
 CHECKS = "checks/ledger_checks.py"
@@ -66,9 +69,14 @@ def _pointer(driver: str, state: str) -> str:
     where = f"Read {own} and follow it exactly."
     if state in TAIL or state in ("done", "wait"):
         where = f"Read {own} if it exists, otherwise {tail}, and follow it exactly."
-    return (f"Revenue desk / workflow `{driver}` / state `{state}`.\n{where}\n"
+    text = (f"Revenue desk / workflow `{driver}` / state `{state}`.\n{where}\n"
             f"The rules in {shared} apply throughout. You are actor `{driver}-agent` with role `{ROLE[driver]}`; "
             f"pass --workflow {driver} on every ledger write.")
+    if STRUCTURE != ROOT / "structure":
+        # A second company's desk keeps its company files in its own folder.
+        text += (f"\nThis desk's company files are in {STRUCTURE.as_posix()}/: wherever the instructions say "
+                 f"structure/<file>, read {STRUCTURE.relative_to(ROOT).as_posix()}/<file> instead.")
+    return text
 
 
 def hard(to: str, p: int, q: str, fn: str) -> dict:
@@ -353,7 +361,7 @@ DESK_GRANTS = {"files": "write", "bash": True, "browser": "none", "sessions": "n
 
 
 def _pipeline_entry(workflow: str) -> dict:
-    pipeline = ROOT / "structure" / "pipeline.json"
+    pipeline = STRUCTURE / "pipeline.json"
     drivers = json.loads(pipeline.read_text(encoding="utf-8")).get("drivers", []) if pipeline.exists() else []
     found = next((d for d in drivers if d["name"] == workflow), None)
     if found:
@@ -435,13 +443,13 @@ def current_version(conn, driver: str) -> int:
 
 
 def approval_mode() -> str:
-    pipeline = ROOT / "structure" / "pipeline.json"
+    pipeline = STRUCTURE / "pipeline.json"
     mode = json.loads(pipeline.read_text(encoding="utf-8")).get("approvals", "human") if pipeline.exists() else "human"
     return mode if mode in APPROVAL_MODES else "human"
 
 
 def wake_mode() -> str:
-    pipeline = ROOT / "structure" / "pipeline.json"
+    pipeline = STRUCTURE / "pipeline.json"
     w = json.loads(pipeline.read_text(encoding="utf-8")).get("wake", "poll") if pipeline.exists() else "poll"
     return w if w in WAKE_MODES else "poll"
 
@@ -754,7 +762,7 @@ def main(argv: list[str] | None = None) -> int:
     out = lambda o: sys.stdout.write((o if isinstance(o, str) else json.dumps(o, indent=2, default=str)) + "\n")
 
     if args.cmd == "compile":
-        pipeline = ROOT / "structure" / "pipeline.json"
+        pipeline = STRUCTURE / "pipeline.json"
         drivers = args.drivers or ([d["name"] for d in json.loads(pipeline.read_text(encoding="utf-8"))["drivers"]
                                     if d.get("enabled", True)] if pipeline.exists() else list(DRIVERS))
         out(compile_(drivers, args.from_template, args.approvals, args.wake))

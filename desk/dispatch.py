@@ -114,6 +114,7 @@ class WidgeXHooks:
 
 def make_dispatcher(name: str | None):
     if not name:
-        pipeline = REPO_ROOT / "structure" / "pipeline.json"
+        from ledgerdb.policy import structure_dir
+        pipeline = structure_dir() / "pipeline.json"
         name = json.loads(pipeline.read_text(encoding="utf-8")).get("dispatcher", "file-queue") if pipeline.exists() else "file-queue"
     return {"dry-run": DryRun, "file-queue": FileQueue, "widgex": WidgeXHooks, "widgex-hooks": WidgeXHooks}[name]()
