@@ -120,6 +120,40 @@ Then, from a WidgeX session in this repo:
 Shared state lives in `~/.revenue-desk/`: the ledger, keys (`.env`), the bank account ids, the drop
 folder and run archives. That way every agent appends to the same ledger, whichever worktree it runs in.
 
+## A second desk: Redwood Micro Components (pricing)
+
+A fictional electronic-components distributor in San Jose. Engineering firms email RFQs: part numbers and
+quantities, sometimes a CSV BOM or a need-by date. The desk prices them, finance approves the price by email, and
+only then does the customer get a quote. A customer PO becomes an order at exactly the approved price, then billing,
+supplier bills and cash run as on the first desk.
+
+- **Sourcing, in code** (`pricing/sourcing.py`): four suppliers with quantity price breaks, lead times and stock
+  (two franchised distributors, a factory-direct channel, a broker). The rule: authorized sources first, enough
+  stock, meet the date, cheapest; otherwise the earliest delivery, flagged. A broker part is always flagged.
+- **Judgement, by the agent**: three bounded calls (account growth, willingness to pay, urgency), each with quoted
+  evidence. The agent must prove it read the current rules (an instructions hash). Growth is also measured from the
+  books, and finance sees both.
+- **The model, in code** (`pricing/model.py`): a logistic win-probability model fit on the quote history plus every
+  outcome since. For each quantity tier it picks the price maximizing P(accept) x qty x margin, never beyond what the
+  history covers. It then makes the schedule a bulk curve above the margin floor. Bootstrap refits give a band.
+- **Finance, by email** (`pricing/report.py`, `desk/finance_reply.py`): the report has a chart per part, the table,
+  the calls with their evidence, and what the price would be with neutral calls. The reply is read in code:
+  `APPROVE`, `APPROVE WITH CHANGES` (`MPN qty: price` lines) or `REJECT: why`, from an approver address only.
+- **Learning**: a finance rejection must become feedback before the RFQ can be re-priced. The workflow revision
+  can add policy floors the model honours (`margin_floor_by_category`, `margin_floor_by_customer`,
+  `contract_prices`). Every won, lost or expired quote becomes training data, and the model refits.
+
+Results of the benchmark run (`docs/redwood-results.md`): **133 pass, 0 fail, 0 pending** over 10 RFQ scenarios.
+Approved prices came within 0.5% of the best expected profit under the hidden demand model. Finance taught the desk
+"FPGAs never under 25% margin" (U07), and the next FPGA RFQ (U08) was priced at 25% on the first draft. Both FPGA
+buyers then declined at that margin. Demo: `python -m desk.demo_pricing`.
+
+Run it from its own checkout, whose `.env` selects the desk (`DESK_WORLD=redwood`, its own desk home, Odoo
+database, structure folder, workflow prefix and hook ids). Both desks share one Odoo container and one WidgeX.
+Limits beyond the first desk's: the quote history and the customers' behaviour are simulated (a hidden demand model
+the scorer uses). Email identity is asserted (an approver allowlist; DKIM checked only for Gmail). Finance is a
+stand-in agent with an answer key. The books are Odoo, not QuickBooks.
+
 ## Layout
 
 ```
