@@ -366,8 +366,10 @@ def hook_block(workflow: str) -> dict:
             "budget": {"tokens": int(p["token_budget"]), "window": "day"},
             "repoDir": str(ROOT),
             "grants": dict(DESK_GRANTS),
+            # One agent per desk is put into this workflow; the hook wakes it in its own session.
+            # A busy agent reads the event after its turn rather than being interrupted.
             "triggers": [{"id": HOOK_IDS[workflow], "kind": "hook", "name": f"{workflow}-work",
-                          "whileRunning": "queue", "maxQueue": 50}]}
+                          "fanout": "one", "delivery": "queue"}]}
 
 
 def controller_template(wake: str = "poll") -> dict:

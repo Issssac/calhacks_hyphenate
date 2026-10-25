@@ -67,7 +67,8 @@ class WidgeXHooks:
         try:
             r = requests.get(f"http://127.0.0.1:{self.port}/v1/events/{last_event}", timeout=5,
                              headers={"Authorization": f"Bearer {token}"})
-            return r.status_code == 200 and r.json().get("status") in ("queued", "running", "started")
+            # Anything short of finished counts as busy: the agent hasn't read and rested on it yet.
+            return r.status_code == 200 and r.json().get("status") not in ("done", "rejected", "expired")
         except Exception:
             return False
 

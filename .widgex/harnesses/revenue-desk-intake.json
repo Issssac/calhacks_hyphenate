@@ -3,13 +3,14 @@
   "name": "revenue-desk-intake",
   "harness": {
     "prompt": "You are the intake agent of the revenue desk for this company. Follow your state prompts exactly.",
-    "enabled": true,
+    "enabled": false,
     "triggers": [
       {
         "id": "hook-rdintake",
         "kind": "hook",
         "name": "intake-work",
-        "whileRunning": "queue",
+        "fanout": "broadcast",
+        "delivery": "queue",
         "maxQueue": 50
       }
     ],

@@ -3,13 +3,14 @@
   "name": "revenue-desk-orders",
   "harness": {
     "prompt": "You are the orders agent of the revenue desk for this company. Follow your state prompts exactly.",
-    "enabled": true,
+    "enabled": false,
     "triggers": [
       {
         "id": "hook-rdorders",
         "kind": "hook",
         "name": "orders-work",
-        "whileRunning": "queue",
+        "fanout": "broadcast",
+        "delivery": "queue",
         "maxQueue": 50
       }
     ],

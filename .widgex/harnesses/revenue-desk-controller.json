@@ -3,13 +3,14 @@
   "name": "revenue-desk-controller",
   "harness": {
     "prompt": "You are the controller agent of the revenue desk for this company. Follow your state prompts exactly.",
-    "enabled": true,
+    "enabled": false,
     "triggers": [
       {
         "id": "hook-rdcontroller",
         "kind": "hook",
         "name": "controller-work",
-        "whileRunning": "queue",
+        "fanout": "broadcast",
+        "delivery": "queue",
         "maxQueue": 50
       }
     ],

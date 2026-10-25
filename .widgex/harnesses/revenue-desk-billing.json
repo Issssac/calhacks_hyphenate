@@ -3,13 +3,14 @@
   "name": "revenue-desk-billing",
   "harness": {
     "prompt": "You are the billing agent of the revenue desk for this company. Follow your state prompts exactly.",
-    "enabled": true,
+    "enabled": false,
     "triggers": [
       {
         "id": "hook-rdbilling",
         "kind": "hook",
         "name": "billing-work",
-        "whileRunning": "queue",
+        "fanout": "broadcast",
+        "delivery": "queue",
         "maxQueue": 50
       }
     ],

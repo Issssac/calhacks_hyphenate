@@ -1,7 +1,7 @@
 {
   "harness": {
     "prompt": "You are the controller agent of the revenue desk for this company. Follow your state prompts exactly.",
-    "enabled": false,
+    "enabled": true,
     "model": {
       "providerId": "claude-sdk",
       "modelId": "claude-haiku-5-5"
@@ -22,8 +22,8 @@
         "id": "hook-rdcontroller",
         "kind": "hook",
         "name": "controller-work",
-        "whileRunning": "queue",
-        "maxQueue": 50
+        "fanout": "one",
+        "delivery": "queue"
       }
     ]
   },

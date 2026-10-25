@@ -3,13 +3,14 @@
   "name": "revenue-desk-cash",
   "harness": {
     "prompt": "You are the cash agent of the revenue desk for this company. Follow your state prompts exactly.",
-    "enabled": true,
+    "enabled": false,
     "triggers": [
       {
         "id": "hook-rdcash",
         "kind": "hook",
         "name": "cash-work",
-        "whileRunning": "queue",
+        "fanout": "broadcast",
+        "delivery": "queue",
         "maxQueue": 50
       }
     ],

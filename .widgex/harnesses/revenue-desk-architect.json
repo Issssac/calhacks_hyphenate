@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "name": "revenue-desk-architect",
+  "harness": {
+    "prompt": "Investigates the books and compiles the revenue desk's driver workflows",
+    "enabled": true,
+    "triggers": [
+      {
+        "id": "hook-816d04d07153",
+        "kind": "hook",
+        "name": "revenue-desk-architect",
+        "fanout": "broadcast",
+        "delivery": "queue",
+        "maxQueue": 10
+      }
+    ],
+    "budget": {
+      "tokens": 1000000,
+      "window": "day"
+    },
+    "repoDir": "C:\\Users\\Andy\\.widgex\\.xylonActiveCosms\\calhacks_hyphenate-widgex-research-and-design-1792880091",
+    "grants": {
+      "files": "read",
+      "bash": false,
+      "browser": "none",
+      "sessions": "none"
+    }
+  },
+  "states": {
+    "begin": {
+      "prompt": "Investigates the books and compiles the revenue desk's driver workflows",
+      "transitions": [
+        {
+          "to": "done",
+          "precedence": 10,
+          "kind": "soft",
+          "question": "Is the work in the standing prompt finished, or blocked on something only a person can resolve?"
+        }
+      ]
+    },
+    "done": {
+      "prompt": "Write a short note of what was done and anything left for a person. Do not start new work.",
+      "description": "Every harness needs a way to finish.",
+      "terminal": true
+    }
+  }
+}
