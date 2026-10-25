@@ -1,0 +1,13 @@
+
+====================================================================================================
+  WHAT IT IS
+====================================================================================================
+
+  An autonomous revenue desk for Halyard Marine Supply (a simulated company). Five agents take a
+  customer quote to cash in real Odoo books and a real sandbox bank: intake -> orders -> billing
+  -> cash, with reconcile checking all three. Each agent works inside a WidgeX workflow that
+  code-checks every step. A controller keeps only the decisions. Every action is appended to one
+  tamper-evident ledger.
+  
+  Diagram: open C:\Users\Andy\.widgex\.xylonActiveCosms\calhacks_hyphenate-widgex-research-and-
+  design-1792880091\docs\architecture.html in a browser.

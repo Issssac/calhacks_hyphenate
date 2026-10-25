@@ -1,0 +1,38 @@
+
+====================================================================================================
+  THE GATE  -  nothing reaches the books without an approval
+====================================================================================================
+
+  1. An agent drafts a sales order (in a scratch ledger, so nothing real changes).
+  2. It tries to confirm it in Odoo without the controller's approval:
+  
+       REFUSED by code, before Odoo was called:  so:SO-DEMO cannot be posted: it has no approval
+    after its latest draft
+  
+  3. The agent tries to approve its own order:
+       REFUSED:  an approval has to come from the controller, not from the agent that drafted it.
+       And a controller who drafted something can't approve it either:
+       REFUSED:  human:sam created or worked on so:SO-DEMO and may not also approve it
+  
+  4. In the live run, every number traces back to its source. `python -m ledgerdb trace so:SO-1005`:
+  
+    seq   20  mail.received     mail:M-Lae69575920b6467c by forwarder            mailbox:S03-1792915
+    seq  138  quote.conflict    quote:Q-1003             by intake-agent         gmail:Lae69575920b6
+    seq  167  approval.granted  quote:Q-1003             by model:controller
+    seq  168  approval.granted  mail:M-Lae69575920b6467c by model:controller
+    seq  367  so.drafted        so:SO-1005               by orders-agent         gmail:Lae69575920b6
+    seq  418  approval.granted  so:SO-1005               by model:controller
+    seq  419  approval.granted  po:PO-1007               by model:controller
+    seq  623  erp.posted        so:SO-1005               by orders-agent         odoo:sale.order/5
+    seq  627  erp.posted        po:PO-1007               by orders-agent         odoo:purchase.order
+    seq  653  mail.received     mail:M-L665e5a0161457aaf by forwarder            mailbox:bill-HF-INV
+    seq  790  invoice.drafted   invoice:INV-1004         by billing-agent        odoo:sale.order/5
+    seq  799  erp.posted        invoice:INV-1004         by billing-agent        odoo:account.move/1
+    seq  803  je.posted         je:invoice-INV-1004-14   by billing-agent        odoo:account.move/1
+    seq  868  erp.posted        bill:B-1005              by billing-agent        odoo:account.move/1
+    seq  869  je.posted         je:bill-B-1005-16        by billing-agent        odoo:account.move/1
+    seq 1238  je.posted         je:payment-P-1004-24     by cash-agent           odoo:account.move/2
+    seq 1239  payment.applied   payment:P-1004           by cash-agent           odoo:account.paymen
+    seq 1240  erp.posted        payment:P-1004           by cash-agent           odoo:account.paymen
+    seq 1248  approval.granted  payment:P-1004           by model:controller
+    seq 1249  approval.granted  banktxn:sandbox_transaction_x50der9q2e4dls4ksk95 by model:controller

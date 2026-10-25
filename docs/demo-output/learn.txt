@@ -1,0 +1,29 @@
+
+====================================================================================================
+  SELF-CORRECTION  -  the desk rewrites its own workflow after being overruled  (S04 -> S08)
+====================================================================================================
+
+  1. The controller rejected a sales order. Feedback recorded (feedback:F-1003):
+      "Bay Rigging is on contract pricing: shackles $4.50, double-braid $1.70/ft. Always use their
+      contract price."
+  
+  2. The orders agent diagnosed its own workflow and proposed a revision:
+      I drafted Bay Rigging's order SO-1003 at list price ($5.00 and $1.90/ft), taken straight from
+      the email, because nothing told orders about contract pricing. The controller rejected it,
+      saying Bay Rigging is on contract pricing and to always use it. The knowledge sat only in the
+      controller's head and a note on the rejection, so a prompt rule plus a policy table the
+      controller can edit is the right place for it.
+  
+  3. Adopted after review: orders v10 -> v11; old version archived at workflows/history/orders/v10/.
+  The change:
+      +"unit_price", "source"}], "total"}`. Quantities come from the quote. Prices come from the q
+      +contract price: look the customer and item up in `contract_prices` in `structure/policy.jso
+      +(`{"<customer>": {"<item>": <unit price>}}`) and, if there is an entry, use that price inst
+      +the one the customer wrote or the list price, whatever the email says. Say so in the line's
+      +`source`, and flag it in the approval request when it differs from the quote (so the SO tot
+      +not tie to the quote's). Each line keeps its `source`. Record `so.drafted` with `--link fro
+      + },
+      + "contract_prices": {
+  
+  4. S08: the same customer again at list price. This time the desk priced it at the contract price
+     on its first draft, with no controller correction needed.

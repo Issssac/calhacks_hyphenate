@@ -1,0 +1,30 @@
+
+====================================================================================================
+  THE MOMENT  -  a price conflict nobody asked it to look for  (scenario S03)
+====================================================================================================
+
+  From                   Lee Tran <ap@deltacharter.example>
+  Subject                Shackles for the spring refit
+  
+  Email body says:
+      Hi,  Confirming 200 of the 1/2in galvanized shackles at $4.00 each, per the attached.  Lee
+  
+  Attached PDF (DCF-quote-acceptance.pdf), page 1 says:
+      DELTA CHARTER FLEET - QUOTE ACCEPTANCE DCF-118
+      $4.40
+      $880.00
+      Total
+      $880.00
+  
+  The desk's intake agent recorded a CONFLICT instead of guessing:
+      body       200 x Galvanized Shackle 1/2in at $4.00   (source: gmail:Lae69575920b6467c#body)
+      pdf        200 x Galvanized Shackle 1/2in at $4.40   (source: gmail:Lae69575920b6467c#att1:p1)
+  
+      Its recommendation: Per company profile the PDF acceptance governs and the body is a summary,
+      so PDF $4.40 / $880.00 would be used. But the PDF price is above the $4.00 the customer states
+      in the body and the $4.00 seen historically for Delta, so the material itself disagrees;
+      controller should confirm which price was agreed (and whether to bill $4.00 x 200 = $800.00).
+  
+  Controller decision (model:controller): Agreed, use the PDF: 200 x $4.40 = $880.00, Net 30
+  (gmail:Lae69575920b6467c#att1:p1).
+    (in this benchmark the controller is a stand-in agent answering from an answer key)

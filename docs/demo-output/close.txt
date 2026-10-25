@@ -1,0 +1,7 @@
+
+====================================================================================================
+  THE SEATS IT FILLS
+====================================================================================================
+
+  Order entry, customer billing, vendor bills with 3-way match, cash application, vendor payments,
+  and reconciliation, with the controller keeping only the decisions.
