@@ -146,9 +146,10 @@ def render(rec: dict, out_dir: Path | None = None) -> dict[str, Any]:
                  f"<td style=\"color:{INK2}\">{cites}</td></tr>")
     mg = rec.get("measured_growth", {})
     p.append("</table>")
-    note = (f"Measured from our books: {_money(mg.get('trailing_12m'), 0)} ordered in the last 12 months against "
-            f"{_money(mg.get('prior_12m'), 0)} the year before ({mg.get('change', 0):+.0%}), which reads as "
-            f"<b>{_esc(mg.get('label'))}</b>.")
+    note = (f"Measured from our books: {mg.get('orders_12m', '?')} orders in the last 12 months against "
+            f"{mg.get('orders_prior_12m', '?')} the year before ({mg.get('change', 0):+.0%}), which reads as "
+            f"<b>{_esc(mg.get('label'))}</b>. By value: {_money(mg.get('trailing_12m'), 0)} against "
+            f"{_money(mg.get('prior_12m'), 0)} ({mg.get('value_change', 0):+.0%}).")
     if rec.get("growth_disagrees"):
         note += f" <b>The desk's growth call disagrees with this.</b> Its evidence is above."
     p.append(f"<p style=\"color:{INK2};font-size:13px\">{note} Repeat customer: {'yes' if rec.get('repeat') else 'no'}.</p>")
