@@ -197,13 +197,20 @@ def main(argv: list[str] | None = None) -> int:
     q = sub.add_parser("quotes")
     q.add_argument("--phase", type=int, default=1)
     q.add_argument("--gmail", action="store_true")
+    q.add_argument("--if-revised", metavar="WORKFLOW",
+                   help="send only once this workflow has adopted a revision (live version >= 2)")
     sub.add_parser("step")
     sub.add_parser("status")
     args = p.parse_args(argv)
     conn = db.connect()
     db.init(conn)
     if args.cmd == "quotes":
-        out = send_quotes(conn, args.phase, args.gmail)
+        v = conn.execute("SELECT version FROM workflow_current WHERE entity = ?",
+                         (f"workflow:{args.if_revised}",)).fetchone() if args.if_revised else None
+        if args.if_revised and not (v and v[0] and int(v[0]) >= 2):
+            out = {"waiting": f"{args.if_revised} has not adopted a revision yet"}
+        else:
+            out = send_quotes(conn, args.phase, args.gmail)
     elif args.cmd == "step":
         out = step(conn)
     else:
