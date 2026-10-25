@@ -3,6 +3,15 @@
 Start from the quote's latest extraction: `python -m ledgerdb state <quote>`, using the latest
 `quote.clarified`, `quote.amended` or `quote.extracted`.
 
+**If the quote is an RFQ** (its extraction says `"rfq": true`), the order is the customer's PO, recorded on the
+quote as `quote.accepted`. Take quantities from that. Each line's `unit_price` is the price we quoted and finance
+approved at that quantity, never one you work out:
+`python -m pricing.send quoted --rfq <quote> --mpn <mpn> --qty <qty>`. Give each SO line its `"mpn"` as well as
+its `"item"`. For each PO line, pick the supplier with the sourcing rule:
+`python -m pricing.sourcing choose --mpn <mpn> --qty <qty> [--days <days to the need-by date>]`. Cite its
+choice in the line's `source`. If it picked a broker, flag that in the approval request. The code check verifies
+every SO price against the quote.
+
 **Sales order.** `python -m ledgerdb next-id so SO --actor <you> --role <role>`. Payload (see `connectors/odoo.py`):
 `{"customer", "customer_email", "customer_ref", "lines": [{"item", "description", "qty",
 "unit_price", "source"}], "total"}`. Prices and quantities come from the quote, each line keeping

@@ -114,7 +114,8 @@ def _esc(x: Any) -> str:
 
 
 def render(rec: dict, out_dir: Path | None = None) -> dict[str, Any]:
-    from seed import world
+    from connectors.mailer import finance_approvers
+    finance = (finance_approvers() or ["finance"])[0]
     rfq = rec["rfq"]
     safe = rfq.replace(":", "-")
     out_dir = out_dir or db.desk_home() / "pricing" / "reports" / f"{safe}-{rec.get('seq', 'draft')}"
@@ -197,7 +198,7 @@ def render(rec: dict, out_dir: Path | None = None) -> dict[str, Any]:
              f"<pre style=\"margin:8px 0\">APPROVE\n\nAPPROVE WITH CHANGES\n{_esc(rec['lines'][0]['mpn'])} "
              f"{_qty(rec['lines'][0]['qty']).replace('K', '000')}: 1.23\n\nREJECT: &lt;why&gt;</pre>"
              f"With APPROVE WITH CHANGES, each line is <code>MPN quantity: unit price</code>; any tier you don't list "
-             f"keeps the recommended price. Only replies from {_esc(world.FINANCE['email'])} are acted on.</div>")
+             f"keeps the recommended price. Only replies from {_esc(finance)} are acted on.</div>")
     p.append("</div>")
     html_doc = "\n".join(p)
     text = [subject, ""]

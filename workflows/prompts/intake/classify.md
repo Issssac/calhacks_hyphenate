@@ -8,7 +8,9 @@ Classify it as exactly one of these:
 
 | class | meaning | what you do next |
 |---|---|---|
-| `customer_quote` | a customer asking for, accepting or sending a priced quote | create the quote (below), then extract |
+| `customer_quote` | a customer accepting or sending a priced quote (they state the prices) | create the quote (below), then extract |
+| `rfq` | a request for quote: a customer asks **us** to price parts (part numbers and quantities, usually no prices, maybe a need-by date or target price) | create the quote (below), then extract it as an RFQ |
+| `customer_po` | a customer's purchase order **accepting a quote we sent** (a reply to it, or citing our quote) | find that quote, re-focus on it, then extract the PO |
 | `quote_amendment` | a change to an earlier quote (qty, price, items, dates) | find the original quote, re-focus on it, then extract the **whole revised deal** |
 | `vendor_bill` | a supplier's invoice to us | classify only; billing picks it up |
 | `remittance` | a customer telling us what a payment covers | classify only; put the invoice refs and amounts you see in the payload for cash |
@@ -22,6 +24,13 @@ For a new quote:
 - `python -m ledgerdb next-id quote Q --actor <you> --role <role>`, then append `quote.received` on `quote:Q-n` with
   `--link from_mail=<mail>`, using the mail's sources as `--source`.
 - Re-focus on the quote: `python -m ledgerdb focus intake quote:Q-n ...`.
+
+For a customer PO:
+- Find the quote it accepts: our quote email has `kind='quote.sent'` on the `quote:Q-n` it priced, and the PO
+  replies to it (`in_reply_to` matches the quote.sent `message_id`) or names our quote reference:
+  `python -m ledgerdb query "SELECT entity, payload FROM events WHERE kind='quote.sent'"`.
+- Re-focus on that `quote:Q-n`. In the next state you record the PO on it as `quote.accepted`. If no quote of
+  ours matches, classify it `customer_quote` instead and treat it as a new order.
 
 For an amendment:
 - Find the original. Use the customer, their reference, and the thread

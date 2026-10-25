@@ -48,6 +48,8 @@ def pending(conn) -> list[dict]:
         latest[r["entity"]] = r  # the newest request per item
     out = []
     for ent, r in latest.items():
+        if (r["payload"] or {}).get("review_state") == "finance_review":
+            continue  # finance's own decision, made by replying to the report (bench/finance.py stands in)
         decided = conn.execute("SELECT 1 FROM events WHERE entity = ? AND seq > ? AND kind IN"
                                " ('approval.granted','approval.rejected')", (ent, r["seq"])).fetchone()
         if not decided:

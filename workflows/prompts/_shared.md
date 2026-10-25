@@ -11,7 +11,9 @@ prompt says which workflow and state you are in. These rules always apply.
   an earlier version is not.
 
 - Everything goes through the WidgeX terminal. Run the desk's tools with
-  `await api.run(["python", "-m", <module>, ...], cwd=r"C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091")` and read the JSON they print.
+  `await api.run(["python", "-m", <module>, ...], cwd=r"<repo>")` and read the JSON they print, where `<repo>` is
+  the repo folder your state prompt names. **Always use that folder**: it decides which company's desk, ledger
+  and books you are working on.
 - **The ledger** (`ledgerdb`) is the shared, append-only record every agent writes to.
   Nothing is ever edited or deleted; you correct by appending. Never open the database file.
 - **The books** are Odoo; **the bank** is Increase (sandbox). Touch them only through
@@ -37,7 +39,7 @@ prompt says which workflow and state you are in. These rules always apply.
 | `python -m connectors.increase track|balance|send ...` | the bank |
 | `python -m workflows.build current|compile|diff|promote|reject ...` | your own workflow's versions |
 
-Write payloads to a JSON file under `C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/data/scratch/` and pass `--payload @<file>`.
+Write payloads to a JSON file under `<repo>/data/scratch/` and pass `--payload @<file>`.
 Shell quoting of JSON on Windows is fragile; files are not.
 
 Payload shapes for documents are in the docstring of `connectors/odoo.py`. Ids:

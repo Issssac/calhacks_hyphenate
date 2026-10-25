@@ -39,7 +39,9 @@ from ledgerdb import db  # noqa: E402
 import checks.ledger_checks as lc  # noqa: E402
 
 ACTOR = "forwarder"
-WORKFLOWS = ("intake", "orders", "billing", "cash", "reconcile", "controller")
+WORKFLOWS = ("intake", "orders", "billing", "cash", "reconcile", "pricing", "controller")
+# Review points a person answers some other way than the controller seat: finance replies to the report email.
+NOT_FOR_CONTROLLER = {"finance_review"}
 
 
 # ---------------------------------------------------------------- sensing
@@ -99,9 +101,12 @@ def work(conn) -> dict[str, list[dict]]:
             found[d].append({"key": f"feedback:{fb['entity']}", "what": f"open feedback {fb['entity']}: {(fb['note'] or '')[:120]}"})
     for r in _decided_requests(conn):
         if r["workflow"] in found:
+            who = "finance" if (r.get("payload") or {}).get("review_state") in NOT_FOR_CONTROLLER else "controller"
             found[r["workflow"]].append({"key": f"decision:{r['entity']}:{r['seq']}",
-                                         "what": f"controller {r['decision'].split('.')[-1]} {r['entity']}: {(r['note'] or '')[:120]}"})
+                                         "what": f"{who} {r['decision'].split('.')[-1]} {r['entity']}: {(r['note'] or '')[:120]}"})
     for r in _undecided_requests(conn):
+        if (r.get("payload") or {}).get("review_state") in NOT_FOR_CONTROLLER:
+            continue  # finance answers by email; desk/finance_reply.py records it
         found["controller"].append({"key": f"request:{r['entity']}:{r['seq']}",
                                     "what": f"{r['workflow']} asks about {r['entity']}"})
     return found
@@ -143,6 +148,13 @@ def message(workflow: str, reasons: list[dict]) -> str:
 
 def run_once(conn, dispatcher, dry_run: bool = False) -> dict:
     sensed = sense(conn)
+    try:
+        from desk import finance_reply
+        decided = finance_reply.process(conn)
+        if decided:
+            sensed["finance_replies"] = decided
+    except Exception as e:  # a reply that can't be read must not stop the desk
+        sensed["finance_reply_error"] = f"{type(e).__name__}: {e}"[:200]
     todo = plan(conn)
     woken = {}
     for wf, reasons in todo.items():

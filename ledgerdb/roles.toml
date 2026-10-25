@@ -13,7 +13,7 @@ kinds = ["structure.*"]
 [roles.intake]
 kinds = ["mail.received", "mail.classified",
          "quote.received", "quote.extracted", "quote.conflict", "quote.clarified",
-         "quote.amended", "quote.rejected", "quote.duplicate", "approval.requested"]
+         "quote.amended", "quote.rejected", "quote.duplicate", "quote.accepted", "approval.requested"]
 
 [roles.orders]
 kinds = ["so.drafted", "so.amended", "so.cancelled", "po.drafted", "po.amended", "po.cancelled",

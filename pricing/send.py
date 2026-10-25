@@ -110,14 +110,15 @@ def _pdf(customer: str, rfq: str, lines: list[dict], valid_until: str) -> bytes:
     return buf.getvalue()
 
 
-def send_quote(conn, rfq: str, ctx: dict, note: str = "") -> dict[str, Any]:
+def send_quote(conn, rfq: str, ctx: dict, note: str = "", odoo=None) -> dict[str, Any]:
     import re
     if re.search(r"\$|\d+\.\d\d|\bUSD\b", note or ""):
         raise mailer.MailRefused("the cover note can't contain prices: the prices come only from finance's approval")
     appr, lines = approved_lines(conn, rfq)
     customer = appr["recommendation"].get("customer")
-    from connectors.odoo import Odoo
-    odoo = Odoo()
+    if odoo is None:
+        from connectors.odoo import Odoo
+        odoo = Odoo()
     to = mailer.customer_email_on_file(customer, odoo)
     valid_until = (date.today() + timedelta(days=VALID_DAYS)).isoformat()
     original = db.rows(conn, "SELECT payload FROM events WHERE entity IN (SELECT dst FROM doc_links WHERE src = ? "
@@ -150,6 +151,10 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="pricing.send", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+    qp = sub.add_parser("quoted", help="the approved price the customer was quoted for a part at a quantity")
+    qp.add_argument("--rfq", required=True)
+    qp.add_argument("--mpn", required=True)
+    qp.add_argument("--qty", type=float, required=True)
     for name in ("report", "quote"):
         sp = sub.add_parser(name)
         sp.add_argument("--rfq", required=True)
@@ -163,6 +168,12 @@ def main(argv: list[str] | None = None) -> int:
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
     conn = db.connect()
+    if args.cmd == "quoted":
+        from checks.ledger_checks import approved_unit_price
+        price = approved_unit_price(conn, args.rfq, args.mpn, args.qty)
+        print(json.dumps({"rfq": args.rfq, "mpn": args.mpn, "qty": args.qty, "unit_price": price,
+                          "problem": None if price is not None else "no quote.sent covers this part at this quantity"}))
+        return 0 if price is not None else 1
     ctx = {"actor": args.actor, "role": args.role, "workflow": args.workflow}
     try:
         out = send_report(conn, args.rfq, ctx) if args.cmd == "report" else send_quote(conn, args.rfq, ctx, args.note)

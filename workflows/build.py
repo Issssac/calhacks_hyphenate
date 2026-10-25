@@ -50,13 +50,13 @@ POLICY = STRUCTURE / "policy.json"
 # WidgeX resolves check.file relative to the harness file's folder and refuses anything outside
 # it, so the workflows point at a shim in .widgex/harnesses/checks/ that loads checks/ledger_checks.py.
 CHECKS = "checks/ledger_checks.py"
-DRIVERS = ("intake", "orders", "billing", "cash", "reconcile")
+DRIVERS = ("intake", "orders", "billing", "cash", "reconcile", "pricing")
 # Two companies' desks can share one WidgeX: each names its workflows and hooks with its own prefix
 # (set in that checkout's .env). The defaults are the first desk's, so nothing about it changes.
 DESK_SLUG = os.environ.get("DESK_SLUG", "revenue-desk")
 HOOK_PREFIX = os.environ.get("DESK_HOOK_PREFIX", "hook-rd")
 ROLE = {"intake": "intake", "orders": "orders", "billing": "billing", "cash": "cash", "reconcile": "reconcile",
-        "architect": "architect", "controller": "controller"}
+        "pricing": "pricing", "architect": "architect", "controller": "controller"}
 TAIL = ("overruled", "revise", "adopt", "promote")
 
 
@@ -71,7 +71,8 @@ def _pointer(driver: str, state: str) -> str:
         where = f"Read {own} if it exists, otherwise {tail}, and follow it exactly."
     text = (f"Revenue desk / workflow `{driver}` / state `{state}`.\n{where}\n"
             f"The rules in {shared} apply throughout. You are actor `{driver}-agent` with role `{ROLE[driver]}`; "
-            f"pass --workflow {driver} on every ledger write.")
+            f"pass --workflow {driver} on every ledger write.\n"
+            f"Repo folder (`<repo>`, the cwd for every tool): {ROOT.as_posix()}")
     if STRUCTURE != ROOT / "structure":
         # A second company's desk keeps its company files in its own folder.
         text += (f"\nThis desk's company files are in {STRUCTURE.as_posix()}/: wherever the instructions say "
@@ -327,6 +328,32 @@ def template(driver: str, mode: str = "human", wake: str = "poll") -> dict:
             "report": review("wait", "Accept these reconciliation findings?",
                              "overruled", "Reject them (say what is wrong or what to look at in the note)?"),
         }
+    elif d == "pricing":
+        # An RFQ: the agent judges the customer (three evidenced calls), the model prices it, finance decides by
+        # email, and only then does the customer get a quote. Every step is a code check on the ledger.
+        states = {
+            "begin": {"transitions": [
+                _feedback_edge(d),
+                hard("assess", 10, "Is your focus an RFQ that needs pricing (new, re-extracted, or rejected by finance)?",
+                     "pricing_focus_is_rfq"),
+                hard("send_quote", 20, "Is your focus an RFQ whose price finance approved, not yet quoted to the customer?",
+                     "pricing_focus_is_approved"),
+                hard("wait", 30, "Is the pricing queue empty?", "pricing_queue_empty")]},
+            "assess": {"transitions": [
+                hard("recommend", 10, "Did you record a pricing.assessment for the focus: growth, willingness to pay "
+                                      "and urgency, each with cited evidence?", "pricing_assessed")]},
+            "recommend": {"transitions": [
+                hard("report", 10, "Did `python -m pricing.model recommend` record a recommendation built from your "
+                                   "latest assessment?", "pricing_recommended")]},
+            "report": {"transitions": [
+                hard("finance_review", 10, "Did `python -m pricing.send report` email finance the latest recommendation "
+                                           "and record the request?", "pricing_report_sent")]},
+            "finance_review": review("send_quote", "Has finance approved the price (as recommended or with changes)?",
+                                     "overruled", "Has finance rejected it (their reason is in the note)?"),
+            "send_quote": {"transitions": [
+                hard("begin", 10, "Did `python -m pricing.send quote` send the customer the approved price and "
+                                  "record quote.sent?", "pricing_quote_sent")]},
+        }
     else:
         raise ValueError(f"no template for {driver!r}")
     states.update(_tail(d))
@@ -562,7 +589,8 @@ def _controls(spec: dict) -> set[tuple]:
 # States whose instructions write to the books or move money. Reaching one must always go
 # through a code check or a controller decision, never only through the agent's own word.
 WRITE_STATES = {"orders": {"post"}, "billing": {"invoice", "invoice_fix", "bill_post"},
-                "cash": {"apply", "apply_approved", "send_payment"}, "intake": set(), "reconcile": set()}
+                "cash": {"apply", "apply_approved", "send_payment"}, "intake": set(), "reconcile": set(),
+                "pricing": {"send_quote"}}  # the customer receives prices
 
 
 def _entry_edges(spec: dict, targets: set[str]) -> set[tuple]:

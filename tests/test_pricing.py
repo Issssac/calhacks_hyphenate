@@ -51,11 +51,13 @@ def test_recommended_markup_is_near_the_true_optimum(fitted):
 def test_schedule_is_a_bulk_curve_above_the_floor(fitted):
     offers = next(p for p in W.PRODUCTS if p["mpn"] == "TPS62130RGTR")["offers"]
     curve = cost_curve(offers, M.tiers_for(750))
-    sched = M.schedule(fitted["coef"], curve, CONTEXTS[0], True, 0.15, 15.0, fitted["bootstrap"], fitted["support"])
+    margin_floor = 0.30  # high enough to bind at some tiers
+    sched = M.schedule(fitted["coef"], curve, CONTEXTS[2], True, 1 / (1 - margin_floor) - 1, 15.0,
+                       fitted["bootstrap"], fitted["support"])
     prices = [r["unit_price"] for r in sched if r["unit_price"] is not None]
     assert prices == sorted(prices, reverse=True)
     for r in sched:
-        assert r["margin"] >= 0.15 - 1e-6
+        assert 1 - r["unit_cost"] / r["unit_price"] >= margin_floor - 1e-9
         assert r["band"][0] <= r["band"][1]
 
 

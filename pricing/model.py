@@ -34,7 +34,7 @@ import numpy as np
 from ledgerdb import db
 from ledgerdb.policy import policy
 from . import features as F
-from .sourcing import TIERS, cost_curve
+from .sourcing import TIERS, cost_curve, part_category
 
 VERSION = "pricing-model/1"
 CAP_MARKUP = 3.0
@@ -149,7 +149,10 @@ def best_markup(beta, qty: float, calls: dict, repeat: bool, floor: float, cap: 
 
 def schedule(beta, curve: list[dict], calls: dict, repeat: bool, floor: float, quote_cost: float,
              band_from: list | None = None, support: dict | None = None) -> list[dict]:
-    """One row per tier: price, markup, margin, win probability, expected profit, source, and any flags."""
+    """One row per tier: price, markup, margin, win probability, expected profit, source, and any flags.
+
+    `floor` is the minimum MARKUP over cost (price >= cost * (1 + floor)). For a margin floor m, pass
+    1 / (1 - m) - 1."""
     out = []
     prev_price = None
     cap = markup_cap(support, calls)
@@ -170,7 +173,10 @@ def schedule(beta, curve: list[dict], calls: dict, repeat: bool, floor: float, q
             price = c * (1 + floor)
             if prev_price is not None and price > prev_price:
                 flags.append("price rises at this quantity: the only source that can supply it costs more")
+        step = 1e-4 if price < 1 else 1e-3
         price = round(price, 4 if price < 1 else 3)
+        if price < c * (1 + floor) - 1e-12:
+            price = round(price + step, 4 if price < 1 else 3)  # rounding must never cross the floor
         pw = p_win(beta, price / c, q, calls, repeat)
         row = {"qty": q, "unit_price": price, "unit_cost": c, "markup": round(price / c, 4),
                "margin": round(1 - c / price, 4), "p_win": round(pw, 4),
@@ -274,15 +280,21 @@ def recommend(conn, rfq: str, ctx: dict, odoo=None) -> dict:
         days = _days_until(ln.get("need_by") or q.get("need_by"))
         offers = offers_from_odoo(odoo, mpn)
         curve = cost_curve(offers, tiers_for(qty), days)
-        entry = {"mpn": mpn, "qty": qty, "need_by": ln.get("need_by") or q.get("need_by"), "days_available": days}
+        category = part_category(mpn)
+        # Floors finance has set (adopted policy keys, learned from their corrections) only ever raise the floor.
+        line_floor = max(floor, float(pol.get("margin_floor_by_category", {}).get(category, 0)),
+                         float(pol.get("margin_floor_by_customer", {}).get(customer, 0)))
+        floor_markup = 1 / (1 - line_floor) - 1  # a margin floor m means price >= cost / (1 - m)
+        entry = {"mpn": mpn, "qty": qty, "category": category, "margin_floor": line_floor,
+                 "need_by": ln.get("need_by") or q.get("need_by"), "days_available": days}
         if mpn in contracts:
             entry["contract_price"] = contracts[mpn]
             entry["schedule"] = [{"qty": t["qty"], "unit_price": contracts[mpn], "unit_cost": t["unit_cost"],
                                   "vendor": t["vendor"], "flags": ["contract price: not modelled"]} for t in curve]
         else:
-            entry["schedule"] = schedule(model["coef"], curve, calls, repeat, floor, quote_cost, model["bootstrap"],
-                                         model.get("support"))
-            entry["neutral"] = schedule(model["coef"], curve, F.NEUTRAL, repeat, floor, quote_cost,
+            entry["schedule"] = schedule(model["coef"], curve, calls, repeat, floor_markup, quote_cost,
+                                         model["bootstrap"], model.get("support"))
+            entry["neutral"] = schedule(model["coef"], curve, F.NEUTRAL, repeat, floor_markup, quote_cost,
                                         support=model.get("support"))
         entry["requested"] = next((r for r in entry["schedule"] if r["qty"] == qty), None)
         lines.append(entry)

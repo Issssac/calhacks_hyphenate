@@ -110,7 +110,8 @@ WHERE s.entity_type = 'quote'
   AND NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity
                   AND e.kind IN ('quote.extracted', 'quote.clarified', 'quote.rejected', 'quote.duplicate'))
 UNION ALL
--- orders: extracted quotes with no sales order yet
+-- orders: extracted quotes with no sales order yet. A request for quote (an RFQ, marked rfq: true on its
+-- extraction) is priced first, and only becomes an order when the customer's PO accepts it (quote.accepted).
 SELECT 'orders', s.entity, 'needs sales order', s.last_seq
 FROM doc_state s
 WHERE s.entity_type = 'quote'
@@ -118,6 +119,36 @@ WHERE s.entity_type = 'quote'
               AND e.kind IN ('quote.extracted', 'quote.clarified'))
   AND NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind IN ('quote.rejected', 'quote.duplicate'))
   AND NOT EXISTS (SELECT 1 FROM doc_links l WHERE l.rel = 'from_quote' AND l.dst = s.entity)
+  AND (NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind IN ('quote.extracted', 'quote.clarified')
+                   AND json_extract(e.payload, '$.rfq') = 1)
+       OR EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'quote.accepted'))
+UNION ALL
+-- pricing: RFQs extracted (or re-extracted, or rejected by finance) with no recommendation since
+SELECT 'pricing', s.entity,
+       CASE WHEN EXISTS (SELECT 1 FROM events r WHERE r.entity = s.entity AND r.kind = 'approval.rejected'
+                         AND r.role = 'finance') THEN 'finance rejected, re-price' ELSE 'needs pricing' END,
+       s.last_seq
+FROM doc_state s
+WHERE s.entity_type = 'quote'
+  AND EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind IN ('quote.extracted', 'quote.clarified')
+              AND json_extract(e.payload, '$.rfq') = 1)
+  AND NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity
+                  AND e.kind IN ('quote.rejected', 'quote.duplicate', 'quote.accepted'))
+  AND COALESCE((SELECT MAX(p.seq) FROM events p WHERE p.entity = s.entity AND p.kind = 'pricing.recommended'), 0)
+      < MAX((SELECT MAX(x.seq) FROM events x WHERE x.entity = s.entity
+             AND x.kind IN ('quote.extracted', 'quote.clarified', 'quote.amended')),
+            COALESCE((SELECT MAX(r.seq) FROM events r WHERE r.entity = s.entity AND r.kind = 'approval.rejected'
+                      AND r.role = 'finance'), 0))
+UNION ALL
+-- pricing: finance approved the latest recommendation, and the customer hasn't been sent the quote
+SELECT 'pricing', s.entity, 'approved, quote to send', s.last_seq
+FROM doc_state s
+WHERE s.entity_type = 'quote'
+  AND EXISTS (SELECT 1 FROM events a WHERE a.entity = s.entity AND a.kind = 'approval.granted' AND a.role = 'finance'
+              AND a.seq > (SELECT MAX(p.seq) FROM events p WHERE p.entity = s.entity AND p.kind = 'pricing.recommended'))
+  AND NOT EXISTS (SELECT 1 FROM events q WHERE q.entity = s.entity AND q.kind = 'quote.sent'
+                  AND q.seq > (SELECT MAX(a.seq) FROM events a WHERE a.entity = s.entity
+                               AND a.kind = 'approval.granted' AND a.role = 'finance'))
 UNION ALL
 -- orders: amended quotes whose SO predates the amendment
 SELECT 'orders', l.src, 'quote amended after SO', s.last_seq

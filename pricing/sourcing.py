@@ -88,6 +88,15 @@ def cost_curve(offers: list[dict], tiers: tuple[int, ...] = TIERS, days_availabl
 
 # ---------------------------------------------------------------- where offers come from
 
+def part_category(mpn: str) -> str | None:
+    """The catalogue category of a part (MCU, MOSFET, FPGA, ...), or None if it isn't in the catalogue."""
+    from seed import world
+    for p in world.PRODUCTS:
+        if p.get("mpn") == mpn or p["name"] == mpn:
+            return p.get("category")
+    return None
+
+
 def offers_from_world(mpn: str) -> list[dict]:
     """The simulated supplier feeds: prices, lead times and stock for one part."""
     from seed import world
@@ -113,3 +122,41 @@ def offers_from_odoo(o, mpn: str) -> list[dict]:
     for off in by_vendor.values():
         off["breaks"].sort()
     return list(by_vendor.values())
+
+
+def main(argv: list[str] | None = None) -> int:
+    """python -m pricing.sourcing choose --mpn X --qty N [--days D] [--allow-broker]
+       python -m pricing.sourcing curve  --mpn X [--qty N] [--days D]"""
+    import argparse
+    import json
+    import sys
+    ap = argparse.ArgumentParser(prog="pricing.sourcing", description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for name in ("choose", "curve"):
+        sp = sub.add_parser(name)
+        sp.add_argument("--mpn", required=True)
+        sp.add_argument("--qty", type=float, default=1)
+        sp.add_argument("--days", type=int, default=None, help="days until the need-by date")
+        sp.add_argument("--allow-broker", action="store_true")
+    args = ap.parse_args(argv)
+    from connectors.odoo import Odoo
+    offers = offers_from_odoo(Odoo(), args.mpn)
+    if not offers:
+        print(json.dumps({"mpn": args.mpn, "problem": "no supplier prices on file in Odoo for this part"}))
+        return 1
+    if args.cmd == "choose":
+        out = choose(offers, args.qty, args.days, args.allow_broker)
+        if out["chosen"] is None and args.days is not None:
+            late = choose(offers, args.qty, None, args.allow_broker)
+            if late["chosen"]:
+                late["flags"].append(f"can't meet the need-by date: earliest {late['chosen']['lead_days']} days")
+                out = late
+    else:
+        out = cost_curve(offers, tuple(sorted(set(TIERS) | {int(args.qty)})), args.days, args.allow_broker)
+    sys.stdout.write(json.dumps({"mpn": args.mpn, "qty": args.qty, "result": out}, indent=2) + "\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

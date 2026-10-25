@@ -25,7 +25,7 @@ if str(ROOT) not in sys.path:
 from ledgerdb import db  # noqa: E402
 from ledgerdb.policy import policy, price_tolerance, structure_dir  # noqa: E402
 
-DRIVERS = ("intake", "orders", "billing", "cash", "reconcile")
+DRIVERS = ("intake", "orders", "billing", "cash", "reconcile", "pricing")
 EPS = 0.005
 
 
@@ -188,7 +188,8 @@ def proposal_ok(conn, driver: str) -> tuple[bool, dict]:
 
 REVIEW_STATES = {"intake": ["clarify", "adopt"], "orders": ["controller_review", "adopt"],
                  "billing": ["invoice_review", "bill_review", "adopt"],
-                 "cash": ["cash_review", "payment_review", "adopt"], "reconcile": ["report", "adopt"]}
+                 "cash": ["cash_review", "payment_review", "adopt"], "reconcile": ["report", "adopt"],
+                 "pricing": ["finance_review", "adopt"]}
 
 
 def latest_request(conn, driver: str, state: str | None = None) -> tuple[int, str, dict] | None:
@@ -276,9 +277,11 @@ def _decided(driver: str, state: str, word: str) -> Callable[..., bool]:
 
 def controller_nothing_open(*_a: Any, **_k: Any) -> bool:
     conn = _conn()
-    open_reqs = [ent for ent, seq in conn.execute(
-        "SELECT entity, MAX(seq) FROM events WHERE kind = 'approval.requested' GROUP BY entity")
-        if decision_after(conn, ent, seq) is None]
+    # Finance answers its own review (by email), so a finance_review is never the controller's to answer.
+    open_reqs = [ent for ent, seq, state in conn.execute(
+        "SELECT entity, MAX(seq), json_extract(payload, '$.review_state') FROM events "
+        "WHERE kind = 'approval.requested' GROUP BY entity")
+        if state != "finance_review" and decision_after(conn, ent, seq) is None]
     return _record(conn, "controller_nothing_open", not open_reqs, {"open_requests": open_reqs[:10]})
 
 
@@ -313,11 +316,15 @@ def intake_extracted(*_a: Any, **_k: Any) -> bool:
     conn = _conn()
     q = _focus_quote(conn)
     last = _last(conn, q, "quote.extracted", "quote.clarified", "quote.amended") if q else None
+    accepted = _last(conn, q, "quote.accepted") if q else None
+    if accepted and (not last or accepted[0] > last[0]):
+        last = accepted  # the customer's PO accepting our quote: a priced order, checked like a quote
     problems = []
     if not last:
         problems.append("no quote.extracted, quote.clarified or quote.amended")
     else:
         p = last[1]
+        rfq = bool(p.get("rfq")) and last is not accepted
         if not p.get("customer"):
             problems.append("no customer")
         lines = p.get("lines") or []
@@ -326,9 +333,14 @@ def intake_extracted(*_a: Any, **_k: Any) -> bool:
         for i, ln in enumerate(lines, 1):
             if not ln.get("source"):
                 problems.append(f"line {i} cites no source")
-            if "unit_price" not in ln:
+            if rfq:
+                # A request for quote asks us for prices: it needs the part and quantity, not a price.
+                if not (ln.get("mpn") or ln.get("item")) or not ln.get("qty"):
+                    problems.append(f"line {i} needs an mpn and a qty")
+            elif "unit_price" not in ln:
                 problems.append(f"line {i} has no unit_price")
-        if lines and "total" in p and abs(_sum_lines(lines, "unit_price") - float(p["total"])) > 0.01 + EPS:
+        if not rfq and lines and p.get("total") is not None and \
+                abs(_sum_lines(lines, "unit_price") - float(p["total"])) > 0.01 + EPS:
             problems.append(f"lines sum to {_sum_lines(lines, 'unit_price')} but total says {p['total']}")
     return _record(conn, "intake_extracted", not problems, {"quote": q, "problems": problems})
 
@@ -347,7 +359,7 @@ def intake_handled(*_a: Any, **_k: Any) -> bool:
         quotes = _children(conn, mail, "from_mail", "quote") if mail else [f]
         for q in quotes:
             if not _last(conn, q, "quote.extracted", "quote.clarified", "quote.amended", "quote.duplicate",
-                         "quote.rejected"):
+                         "quote.rejected", "quote.accepted"):
                 problems.append(f"{q} not resolved")
     return _record(conn, "intake_handled", not problems, {"focus": f, "problems": problems})
 
@@ -401,9 +413,24 @@ def orders_drafts_valid(*_a: Any, **_k: Any) -> bool:
         if abs(so_total - float(sop.get("total", so_total))) > pol["total_tie_abs"] + EPS:
             problems.append(f"SO lines sum to {so_total}, SO total says {sop.get('total')}")
         qp = None
+        rfq = False
         if quote:
             q = _last(conn, quote, "quote.clarified", "quote.extracted", "quote.amended")
             qp = q[1] if q else None
+            rfq = bool(qp and qp.get("rfq"))
+        if rfq:
+            # An RFQ: the customer's PO (quote.accepted) sets the quantities, and every unit price must be the one
+            # finance approved and the customer was quoted, at that quantity's tier.
+            acc = _last(conn, quote, "quote.accepted")
+            qp = acc[1] if acc else None
+            for ln in so_lines:
+                want = approved_unit_price(conn, quote, ln.get("mpn") or ln["item"], float(ln.get("qty", 1)))
+                if want is None:
+                    problems.append(f"{ln['item']} at {ln.get('qty')} was never quoted to the customer")
+                elif abs(float(ln["unit_price"]) - want) > EPS:
+                    problems.append(f"{ln['item']} sells at {ln['unit_price']} but the approved, quoted price at "
+                                    f"{ln.get('qty')} is {want}")
+            detail["rfq"] = True
         if qp and qp.get("total") is not None and abs(so_total - float(qp["total"])) > pol["total_tie_abs"] + EPS:
             problems.append(f"SO total {so_total} does not tie to the quote's {qp['total']}")
         if not _staged_after_def(conn, so):
@@ -647,6 +674,127 @@ def controller_idle(*_a: Any, **_k: Any) -> bool:
             open_reqs += 1
     idle = desk_idle()
     return _record(conn, "controller_idle", open_reqs == 0 and idle, {"open_requests": open_reqs, "desk_idle": idle})
+
+
+# ---------------------------------------------------------------- pricing (RFQs: judge, model, finance, quote)
+
+def _latest_seq(conn, entity: str, *kinds: str) -> int:
+    marks = ",".join("?" * len(kinds))
+    return conn.execute(f"SELECT COALESCE(MAX(seq), 0) FROM events WHERE entity = ? AND kind IN ({marks})",
+                        (entity, *kinds)).fetchone()[0]
+
+
+def _pricing_reason(conn) -> tuple[str | None, str | None]:
+    f = focus(conn, "pricing")
+    r = next((x["reason"] for x in _queue(conn, "pricing") if x["entity"] == f), None)
+    return f, r
+
+
+def pricing_focus_is_rfq(*_a: Any, **_k: Any) -> bool:
+    conn = _conn()
+    f, r = _pricing_reason(conn)
+    return _record(conn, "pricing_focus_is_rfq", r in ("needs pricing", "finance rejected, re-price"),
+                   {"focus": f, "reason": r})
+
+
+def pricing_focus_is_approved(*_a: Any, **_k: Any) -> bool:
+    conn = _conn()
+    f, r = _pricing_reason(conn)
+    return _record(conn, "pricing_focus_is_approved", r == "approved, quote to send", {"focus": f, "reason": r})
+
+
+def pricing_assessed(*_a: Any, **_k: Any) -> bool:
+    """The focus has an assessment newer than its latest extraction (and any rejection), with three bounded,
+    evidenced calls, recorded by the pricing role."""
+    from pricing.features import assessment_problems
+    conn = _conn()
+    f = focus(conn, "pricing")
+    detail: dict = {"focus": f}
+    ok = False
+    if f:
+        since = max(_latest_seq(conn, f, "quote.extracted", "quote.clarified", "quote.amended"),
+                    _latest_seq(conn, f, "approval.rejected"))
+        row = conn.execute("SELECT seq, role, payload FROM events WHERE entity = ? AND kind = 'pricing.assessment'"
+                           " ORDER BY seq DESC LIMIT 1", (f,)).fetchone()
+        if not row or row[0] <= since:
+            detail["problem"] = "no pricing.assessment since the latest extraction or rejection"
+        elif row[1] != "pricing":
+            detail["problem"] = f"the assessment was recorded by role {row[1]!r}, not pricing"
+        else:
+            problems = assessment_problems(json.loads(row[2]))
+            detail["problems"] = problems
+            ok = not problems
+    return _record(conn, "pricing_assessed", ok, detail)
+
+
+def pricing_recommended(*_a: Any, **_k: Any) -> bool:
+    """The model's recommendation is built from the latest assessment and the latest extraction."""
+    conn = _conn()
+    f = focus(conn, "pricing")
+    detail: dict = {"focus": f}
+    ok = False
+    if f:
+        rec = _last(conn, f, "pricing.recommended")
+        a = _latest_seq(conn, f, "pricing.assessment")
+        q = _latest_seq(conn, f, "quote.extracted", "quote.clarified", "quote.amended")
+        if not rec or rec[0] < a:
+            detail["problem"] = "no recommendation since the latest assessment: run python -m pricing.model recommend"
+        else:
+            inputs = rec[1].get("inputs", {})
+            ok = inputs.get("assessment_seq") == a and inputs.get("quote_seq") == q
+            detail.update({"assessment_seq": a, "quote_seq": q, "used": inputs})
+    return _record(conn, "pricing_recommended", ok, detail)
+
+
+def pricing_report_sent(*_a: Any, **_k: Any) -> bool:
+    """Finance was emailed the latest recommendation, and the request for its decision is recorded."""
+    conn = _conn()
+    f = focus(conn, "pricing")
+    detail: dict = {"focus": f}
+    ok = False
+    if f:
+        rec = _latest_seq(conn, f, "pricing.recommended")
+        req = conn.execute("SELECT seq, payload FROM events WHERE entity = ? AND kind = 'approval.requested'"
+                           " AND json_extract(payload, '$.review_state') = 'finance_review' AND seq > ?"
+                           " ORDER BY seq DESC LIMIT 1", (f, rec)).fetchone()
+        if req:
+            p = json.loads(req[1])
+            mail = _last(conn, p.get("report_mail", ""), "mail.sent")
+            ok = bool(mail) and mail[1].get("purpose") == "pricing_report" and \
+                mail[1].get("recommendation_seq") == rec == p.get("recommendation_seq")
+            detail.update({"request_seq": req[0], "report_mail": p.get("report_mail")})
+        else:
+            detail["problem"] = "no finance_review request after the latest recommendation: run python -m pricing.send report"
+    return _record(conn, "pricing_report_sent", ok, detail)
+
+
+def pricing_quote_sent(*_a: Any, **_k: Any) -> bool:
+    conn = _conn()
+    f = focus(conn, "pricing")
+    ok = False
+    detail: dict = {"focus": f}
+    if f:
+        appr = conn.execute("SELECT COALESCE(MAX(seq), 0) FROM events WHERE entity = ? AND kind = 'approval.granted'"
+                            " AND role = 'finance'", (f,)).fetchone()[0]
+        sent = _last(conn, f, "quote.sent")
+        ok = bool(appr) and bool(sent) and sent[0] > appr and sent[1].get("approval_seq") == appr
+        detail.update({"approval_seq": appr, "quote_sent_seq": sent and sent[0]})
+    return _record(conn, "pricing_quote_sent", ok, detail)
+
+
+def approved_unit_price(conn, quote: str, mpn: str, qty: float) -> float | None:
+    """The price the customer was quoted (finance-approved) for this part at this quantity: the tier at or below it."""
+    sent = _last(conn, quote, "quote.sent")
+    if not sent:
+        return None
+    for ln in sent[1].get("lines", []):
+        if str(ln.get("mpn", "")).upper() == str(mpn).upper():
+            price = None
+            for t in sorted(ln.get("schedule", []), key=lambda r: r["qty"]):
+                if qty >= t["qty"]:
+                    price = t["unit_price"]
+            return price
+    return None
 
 
 # ---------------------------------------------------------------- architect
