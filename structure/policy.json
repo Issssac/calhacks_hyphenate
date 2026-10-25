@@ -12,5 +12,12 @@
   "total_tie_abs": "One cent: documents must tie exactly.",
   "controller": "No named person found; placeholder until one is set.",
   "idle_minutes": "Default; volume is small."
- }
+ },
+ "contract_prices": {
+  "Bay Rigging Co": {
+   "Galvanized Shackle 1/2in": 4.5,
+   "Double-Braid Line 1/2in (ft)": 1.7
+  }
+ },
+ "contract_prices_why": "Controller note on so:SO-1003 (seq 283): Bay Rigging is on contract pricing, shackles $4.50, double-braid $1.70/ft; always use their contract price."
 }

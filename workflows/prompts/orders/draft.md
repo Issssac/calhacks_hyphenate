@@ -5,8 +5,12 @@ Start from the quote's latest extraction: `python -m ledgerdb state <quote>`, us
 
 **Sales order.** `python -m ledgerdb next-id so SO --actor <you> --role <role>`. Payload (see `connectors/odoo.py`):
 `{"customer", "customer_email", "customer_ref", "lines": [{"item", "description", "qty",
-"unit_price", "source"}], "total"}`. Prices and quantities come from the quote, each line keeping
-its `source`. Record `so.drafted` with `--link from_quote=<quote>`. For an amendment, first check whether
+"unit_price", "source"}], "total"}`. Quantities come from the quote. Prices come from the quote too, except where the customer has a
+contract price: look the customer and item up in `contract_prices` in `structure/policy.json`
+(`{"<customer>": {"<item>": <unit price>}}`) and, if there is an entry, use that price instead of
+the one the customer wrote or the list price, whatever the email says. Say so in the line's
+`source`, and flag it in the approval request when it differs from the quote (so the SO total will
+not tie to the quote's). Each line keeps its `source`. Record `so.drafted` with `--link from_quote=<quote>`. For an amendment, first check whether
 the existing SO has been confirmed (`python -m ledgerdb state <so>` shows an `erp.posted`, or
 `python -m connectors.odoo read sale.order '[["name","=","<S000nn>"]]' state invoice_status`).
 If it is still a draft, record `so.amended` on it with the whole revised order. If it is

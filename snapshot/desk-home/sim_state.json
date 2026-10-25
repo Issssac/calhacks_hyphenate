@@ -1,0 +1,143 @@
+{
+  "sent": {
+    "S01": {
+      "file": "S01-1792915222.eml",
+      "message_id": "<s01.1792915222@sim.halyard.example>",
+      "where": "mailbox:S01-1792915222.eml"
+    },
+    "S02": {
+      "file": "S02-1792915222.eml",
+      "message_id": "<s02.1792915222@sim.halyard.example>",
+      "where": "mailbox:S02-1792915222.eml"
+    },
+    "S03": {
+      "file": "S03-1792915222.eml",
+      "message_id": "<s03.1792915222@sim.halyard.example>",
+      "where": "mailbox:S03-1792915222.eml"
+    },
+    "S04": {
+      "file": "S04-1792915222.eml",
+      "message_id": "<s04.1792915222@sim.halyard.example>",
+      "where": "mailbox:S04-1792915222.eml"
+    },
+    "S05": {
+      "file": "S05-1792915222.eml",
+      "message_id": "<s05.1792915222@sim.halyard.example>",
+      "where": "mailbox:S05-1792915222.eml"
+    },
+    "S07": {
+      "file": "S07-1792915222.eml",
+      "message_id": "<s07.1792915222@sim.halyard.example>",
+      "where": "mailbox:S07-1792915222.eml"
+    },
+    "S09": {
+      "file": "S09-1792915222.eml",
+      "message_id": "<s09.1792915222@sim.halyard.example>",
+      "where": "mailbox:S09-1792915222.eml"
+    },
+    "S10": {
+      "file": "S10-1792915222.eml",
+      "message_id": "<s10.1792915222@sim.halyard.example>",
+      "where": "mailbox:S10-1792915222.eml"
+    },
+    "S06": {
+      "file": "S06-1792920154.eml",
+      "message_id": "<s06.1792920154@sim.halyard.example>",
+      "where": "mailbox:S06-1792920154.eml"
+    },
+    "S08": {
+      "file": "S08-1792920154.eml",
+      "message_id": "<s08.1792920154@sim.halyard.example>",
+      "where": "mailbox:S08-1792920154.eml"
+    }
+  },
+  "bills": {
+    "po:PO-1001": {
+      "ref": "BE-INV-7000",
+      "where": "mailbox:bill-BE-INV-7000.eml",
+      "scenario": "S01"
+    },
+    "po:PO-1002": {
+      "ref": "HF-INV-7001",
+      "where": "mailbox:bill-HF-INV-7001.eml",
+      "scenario": "S02"
+    },
+    "po:PO-1005": {
+      "ref": "BE-INV-7002",
+      "where": "mailbox:bill-BE-INV-7002.eml",
+      "scenario": "S07"
+    },
+    "po:PO-1006": {
+      "ref": "PC-INV-7003",
+      "where": "mailbox:bill-PC-INV-7003.eml",
+      "scenario": "S07"
+    },
+    "po:PO-1007": {
+      "ref": "HF-INV-7004",
+      "where": "mailbox:bill-HF-INV-7004.eml",
+      "scenario": "S03"
+    },
+    "po:PO-1008": {
+      "ref": "HF-INV-7005",
+      "where": "mailbox:bill-HF-INV-7005.eml",
+      "scenario": "S09"
+    },
+    "po:PO-1009": {
+      "ref": "HF-INV-7006",
+      "where": "mailbox:bill-HF-INV-7006.eml",
+      "scenario": "S02"
+    },
+    "po:PO-1010": {
+      "ref": "HF-INV-7007",
+      "where": "mailbox:bill-HF-INV-7007.eml",
+      "scenario": "S08"
+    },
+    "po:PO-1003": {
+      "ref": "HF-INV-7008",
+      "where": "mailbox:bill-HF-INV-7008.eml",
+      "scenario": "S04"
+    },
+    "po:PO-1004": {
+      "ref": "PC-INV-7009",
+      "where": "mailbox:bill-PC-INV-7009.eml",
+      "scenario": "S04"
+    }
+  },
+  "paid": {
+    "invoice:INV-1002": {
+      "scenario": "S02",
+      "amount": 3347.5,
+      "transfer": "sandbox_inbound_ach_transfer_0ha3bip9ycuv041mm1c3"
+    },
+    "invoice:INV-1001": {
+      "scenario": "S01",
+      "amount": 2584.91,
+      "transfer": "sandbox_inbound_ach_transfer_uqdxsbij9eph402yikj9"
+    },
+    "invoice:INV-1003": {
+      "scenario": "S01",
+      "amount": 2584.91,
+      "transfer": "sandbox_inbound_ach_transfer_uqdxsbij9eph402yikj9"
+    },
+    "invoice:INV-1004": {
+      "scenario": "S03",
+      "amount": 930.6,
+      "transfer": "sandbox_inbound_ach_transfer_2hij7f5h4a9598hfv120"
+    },
+    "invoice:INV-1006": {
+      "scenario": "S02",
+      "amount": 380.0,
+      "transfer": "sandbox_inbound_ach_transfer_tt7u99flu3em3a8rzshn"
+    },
+    "invoice:INV-1007": {
+      "scenario": "S08",
+      "amount": 1245.94,
+      "transfer": "sandbox_inbound_ach_transfer_pghhzuwrf3r4hz7r2wzg"
+    },
+    "invoice:INV-1008": {
+      "scenario": "S04",
+      "amount": 3123.15,
+      "transfer": "sandbox_inbound_ach_transfer_j41lzt3yxn8k85ghovmm"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+ "margin_floor": 0.2,
+ "price_tolerance_pct": 0.02,
+ "price_tolerance_abs": 0.05,
+ "total_tie_abs": 0.01,
+ "controller": "human:controller",
+ "idle_minutes": 15,
+ "why": {
+  "margin_floor": "List margins run 27-32% on all seven products; 20% leaves room for modest discounts (Delta's $4.00 shackle is 22.5%) but flags deeper cuts.",
+  "price_tolerance_pct": "2% of PO cost covers rounding on vendor bills; vendor price lists are fixed.",
+  "price_tolerance_abs": "5 cents floor so cheap rope per-foot prices are not over-tight.",
+  "total_tie_abs": "One cent: documents must tie exactly.",
+  "controller": "No named person found; placeholder until one is set.",
+  "idle_minutes": "Default; volume is small."
+ }
+}
