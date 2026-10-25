@@ -1,7 +1,22 @@
 {
   "harness": {
-    "prompt": "You are the controller agent of the revenue desk. Follow your state prompts exactly.",
+    "prompt": "You are the controller agent of the revenue desk for this company. Follow your state prompts exactly.",
     "enabled": true,
+    "model": {
+      "providerId": "claude-sdk",
+      "modelId": "claude-haiku-5-5"
+    },
+    "budget": {
+      "tokens": 1500000,
+      "window": "day"
+    },
+    "repoDir": "C:\\Users\\Andy\\.widgex\\.xylonActiveCosms\\calhacks_hyphenate-widgex-research-and-design-1792880091",
+    "grants": {
+      "files": "write",
+      "bash": true,
+      "browser": "none",
+      "sessions": "none"
+    },
     "triggers": [
       {
         "id": "hook-rdcontroller",
@@ -11,6 +26,25 @@
         "maxQueue": 50
       }
     ]
+  },
+  "systemPrompt": {
+    "sections": {
+      "bug-reports": "stub",
+      "browser": "stub",
+      "review": "omit",
+      "preview": "stub",
+      "walkthrough": "omit",
+      "board": "stub",
+      "past-work": "omit",
+      "phases": "stub",
+      "relay": "omit",
+      "links": "omit",
+      "bulletin": "omit",
+      "specialists": "omit",
+      "tools.website": "stub"
+    },
+    "claudeMd": false,
+    "autoMemory": false
   },
   "version": 2,
   "name": "revenue-desk-controller",

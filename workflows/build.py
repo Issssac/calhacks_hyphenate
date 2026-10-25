@@ -324,6 +324,7 @@ def template(driver: str, mode: str = "human", wake: str = "poll") -> dict:
     spec = {"version": 2, "name": display_name(d), "description": f"Revenue desk {d} driver", "states": ordered}
     if wake == "hooks":
         spec["harness"] = hook_block(d)
+        spec["systemPrompt"] = LEAN_SYSTEM_PROMPT
     return spec
 
 
@@ -332,10 +333,39 @@ def display_name(workflow: str) -> str:
     return f"revenue-desk-{workflow}"
 
 
+# What a desk agent needs from WidgeX's own system prompt: none of the browser, preview, board or
+# phase guidance, and neither CLAUDE.md nor auto memory (measured ~16.6k + ~4.7k tokens a turn).
+# Sections that carry a rule the agent must keep can only be stubbed, and are.
+LEAN_SYSTEM_PROMPT = {
+    "sections": {"bug-reports": "stub", "browser": "stub", "review": "omit", "preview": "stub",
+                 "walkthrough": "omit", "board": "stub", "past-work": "omit", "phases": "stub",
+                 "relay": "omit", "links": "omit", "bulletin": "omit", "specialists": "omit",
+                 "tools.website": "stub"},
+    "claudeMd": False,
+    "autoMemory": False,
+}
+DESK_GRANTS = {"files": "write", "bash": True, "browser": "none", "sessions": "none"}
+
+
+def _pipeline_entry(workflow: str) -> dict:
+    pipeline = ROOT / "structure" / "pipeline.json"
+    drivers = json.loads(pipeline.read_text(encoding="utf-8")).get("drivers", []) if pipeline.exists() else []
+    found = next((d for d in drivers if d["name"] == workflow), None)
+    if found:
+        return found
+    return {"model": "claude-haiku-5-5", "token_budget": 1500000} if workflow == "controller" else \
+        {"model": "claude-sonnet-5-5", "token_budget": 3000000}
+
+
 def hook_block(workflow: str) -> dict:
-    """The workflow's hook: the inbox forwarder posts to it when this workflow has new work."""
-    return {"prompt": f"You are the {workflow} agent of the revenue desk. Follow your state prompts exactly.",
+    """How WidgeX runs this workflow: its hook (the inbox forwarder posts to it), model, budget and grants."""
+    p = _pipeline_entry(workflow)
+    return {"prompt": f"You are the {workflow} agent of the revenue desk for this company. Follow your state prompts exactly.",
             "enabled": True,
+            "model": {"providerId": "claude-sdk", "modelId": p["model"]},
+            "budget": {"tokens": int(p["token_budget"]), "window": "day"},
+            "repoDir": str(ROOT),
+            "grants": dict(DESK_GRANTS),
             "triggers": [{"id": HOOK_IDS[workflow], "kind": "hook", "name": f"{workflow}-work",
                           "whileRunning": "queue", "maxQueue": 50}]}
 
@@ -350,7 +380,7 @@ def controller_template(wake: str = "poll") -> dict:
         "done": {"terminal": True, "transitions": []},
     }
     states = _finish("controller", states, "human", wake)
-    spec_extra = {"harness": hook_block("controller")} if wake == "hooks" else {}
+    spec_extra = {"harness": hook_block("controller"), "systemPrompt": LEAN_SYSTEM_PROMPT} if wake == "hooks" else {}
     return {**spec_extra, "version": 2, "name": display_name("controller"),
             "description": "Benchmark controller: decides approval requests from the answer key",
             "states": {n: {"prompt": s["prompt"], **{k: v for k, v in s.items() if k != "prompt"}}
