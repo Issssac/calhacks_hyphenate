@@ -78,11 +78,15 @@ GROUP BY dst;
 
 -- Each driver's work queue. A driver drains its queue and stops.
 CREATE VIEW open_items AS
--- intake: mail pulled from the inbox that nobody has classified yet
+-- intake: mail pulled from the inbox that nobody has classified yet (not the desk's own sent mail)
 SELECT 'intake' AS queue, s.entity, 'needs classification' AS reason, s.last_seq AS since_seq
 FROM doc_state s
 WHERE s.entity_type = 'mail'
   AND NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'mail.classified')
+  AND NOT EXISTS (SELECT 1 FROM events e WHERE e.entity = s.entity AND e.kind = 'mail.sent')
+  -- a finance reply that code has already turned into a decision (desk/finance_reply.py)
+  AND NOT EXISTS (SELECT 1 FROM events e WHERE e.kind = 'note.finance_processed'
+                  AND json_extract(e.payload, '$.reply') = s.entity)
 UNION ALL
 -- billing: mail classified as a vendor bill that has not been recorded as a bill
 SELECT 'billing', s.entity, 'vendor bill to record', s.last_seq

@@ -465,6 +465,14 @@ def sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def instructions_hash(driver: str, state: str) -> str:
+    """A short hash of a state's current instructions file. An agent that records it proves it read this version."""
+    path = PROMPTS / driver / f"{state}.md"
+    if not path.exists():
+        path = PROMPTS / "_tail" / f"{state}.md"
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()[:12]
+
+
 def live_path(driver: str) -> Path:
     return HARNESS_DIR / f"{HARNESS_FILE_PREFIX}{driver}.json"
 
@@ -829,6 +837,9 @@ def main(argv: list[str] | None = None) -> int:
     rj.add_argument("--addresses", action="append", default=[])
     rj.add_argument("--reason", required=True)
     sub.add_parser("current")
+    ins = sub.add_parser("instructions", help="print a state's current instructions file and its hash")
+    ins.add_argument("driver")
+    ins.add_argument("state")
     sub.add_parser("architect", help="(re)write .widgex/harnesses/architect.json")
     sub.add_parser("controller", help="(re)write .widgex/harnesses/controller.json (benchmark controller)")
     args = p.parse_args(argv)
@@ -842,6 +853,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.cmd == "diff":
         out(diff(args.driver))
+        return 0
+    if args.cmd == "instructions":
+        path = PROMPTS / args.driver / f"{args.state}.md"
+        if not path.exists():
+            path = PROMPTS / "_tail" / f"{args.state}.md"
+        out(f"instructions: {instructions_hash(args.driver, args.state)}\n\n" + path.read_text(encoding="utf-8"))
         return 0
     if args.cmd in ("architect", "controller"):
         HARNESS_DIR.mkdir(parents=True, exist_ok=True)

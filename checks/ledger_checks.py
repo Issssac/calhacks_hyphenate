@@ -721,7 +721,14 @@ def pricing_assessed(*_a: Any, **_k: Any) -> bool:
         elif row[1] != "pricing":
             detail["problem"] = f"the assessment was recorded by role {row[1]!r}, not pricing"
         else:
-            problems = assessment_problems(json.loads(row[2]))
+            payload = json.loads(row[2])
+            problems = assessment_problems(payload)
+            # The judgement rules change when finance teaches the desk something: prove the current ones were read.
+            from workflows.build import instructions_hash
+            want = instructions_hash("pricing", "assess")
+            if payload.get("instructions") != want:
+                problems.append(f"record \"instructions\": \"{want}\" after reading the current rules with "
+                                f"`python -m workflows.build instructions pricing assess` (got {payload.get('instructions')!r})")
             detail["problems"] = problems
             ok = not problems
     return _record(conn, "pricing_assessed", ok, detail)

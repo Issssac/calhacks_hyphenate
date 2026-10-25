@@ -68,6 +68,10 @@ def test_an_rfq_from_request_to_order(conn, tmp_path):
     calls = {k: {"value": v, "evidence": [{"source": "gmail:x#body", "says": "..."}]}
              for k, v in {"growth": "growing", "wtp": "high", "urgency": "normal"}.items()}
     db.append(conn, kind="pricing.assessment", entity=RFQ, payload={"calls": calls}, **PRICING)
+    assert not lc.pricing_assessed()  # made without reading the current rules
+    from workflows.build import instructions_hash
+    db.append(conn, kind="pricing.assessment", entity=RFQ,
+              payload={"calls": calls, "instructions": instructions_hash("pricing", "assess")}, **PRICING)
     assert lc.pricing_assessed()
     rec = M.recommend(conn, RFQ, PRICING, odoo=FakeOdoo())
     assert lc.pricing_recommended()
