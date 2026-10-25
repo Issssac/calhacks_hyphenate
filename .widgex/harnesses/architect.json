@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "name": "architect",
+  "name": "revenue-desk-architect",
   "description": "Investigates the books and compiles the revenue desk's driver workflows",
   "states": {
     "begin": {

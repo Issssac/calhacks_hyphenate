@@ -13,7 +13,7 @@
     ]
   },
   "version": 2,
-  "name": "controller",
+  "name": "revenue-desk-controller",
   "description": "Benchmark controller: decides approval requests from the answer key",
   "states": {
     "begin": {

@@ -321,10 +321,15 @@ def template(driver: str, mode: str = "human", wake: str = "poll") -> dict:
     ordered = {"begin": states.pop("begin"), **states}
     for name, st in ordered.items():
         ordered[name] = {"prompt": st["prompt"], **{k: v for k, v in st.items() if k != "prompt"}}
-    spec = {"version": 2, "name": d, "description": f"Revenue desk {d} driver", "states": ordered}
+    spec = {"version": 2, "name": display_name(d), "description": f"Revenue desk {d} driver", "states": ordered}
     if wake == "hooks":
         spec["harness"] = hook_block(d)
     return spec
+
+
+def display_name(workflow: str) -> str:
+    """What the Harnesses page shows. File names (and so the ledger's workflow ids) stay plain."""
+    return f"revenue-desk-{workflow}"
 
 
 def hook_block(workflow: str) -> dict:
@@ -346,7 +351,7 @@ def controller_template(wake: str = "poll") -> dict:
     }
     states = _finish("controller", states, "human", wake)
     spec_extra = {"harness": hook_block("controller")} if wake == "hooks" else {}
-    return {**spec_extra, "version": 2, "name": "controller",
+    return {**spec_extra, "version": 2, "name": display_name("controller"),
             "description": "Benchmark controller: decides approval requests from the answer key",
             "states": {n: {"prompt": s["prompt"], **{k: v for k, v in s.items() if k != "prompt"}}
                        for n, s in states.items()}}
@@ -374,7 +379,7 @@ def architect_template() -> dict:
     out = {}
     for name, st in states.items():
         out[name] = {"prompt": st["prompt"], **{k: v for k, v in st.items() if k != "prompt"}}
-    return {"version": 2, "name": "architect",
+    return {"version": 2, "name": display_name("architect"),
             "description": "Investigates the books and compiles the revenue desk's driver workflows", "states": out}
 
 # ---------------------------------------------------------------- helpers
@@ -548,7 +553,7 @@ def weakened(live: dict, new: dict, driver: str | None = None) -> list[str]:
     """A revision may add controls, never remove them, and may not open a new way into a write state."""
     missing = _controls(live) - _controls(new)
     out = [f"removes {kind} {what!r}" for kind, what in sorted(missing, key=str)]
-    writes = WRITE_STATES.get(driver or new.get("name", ""), set())
+    writes = WRITE_STATES.get(driver or new.get("name", "").removeprefix("revenue-desk-"), set())
     added = _entry_edges(new, writes) - _entry_edges(live, writes)
     out += [f"adds a new way into {to!r} (from {frm!r}, {kind}{', check ' + fn if fn else ''})"
             for frm, to, kind, fn, _ in sorted(added, key=str)]
