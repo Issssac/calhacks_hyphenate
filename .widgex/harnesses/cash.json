@@ -340,7 +340,7 @@
   },
   "harness": {
     "prompt": "You are the cash agent of the revenue desk for this company. Follow your state prompts exactly.",
-    "enabled": true,
+    "enabled": false,
     "model": {
       "providerId": "claude-sdk",
       "modelId": "claude-sonnet-5-5"

@@ -1,7 +1,7 @@
 {
   "harness": {
     "prompt": "You are the controller agent of the revenue desk for this company. Follow your state prompts exactly.",
-    "enabled": true,
+    "enabled": false,
     "model": {
       "providerId": "claude-sdk",
       "modelId": "claude-haiku-5-5"
