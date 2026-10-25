@@ -154,19 +154,20 @@ def _free_precedence(transitions: list[dict], start: int) -> int:
 def _finish(driver: str, states: dict[str, dict], mode: str, wake: str = "poll") -> dict[str, dict]:
     """Render review states for the approval and wake modes, and add prompts."""
     reviews = {n: st.pop("_review") for n, st in states.items() if "_review" in st}
+    who = lambda review: "finance" if review == "finance_review" else "the controller"  # who answers each review
     for name, (a_to, a_q, r_to, r_q) in reviews.items():
         if mode == "human":
             states[name].update({"review": {}, "transitions": [human(a_to, 10, a_q, "approve"),
                                                                 human(r_to, 20, r_q, "reject")]})
         else:
             states[name]["transitions"] = [
-                hard(a_to, 10, f"Has the controller approved it (approval.granted after your request)? ({a_q})",
+                hard(a_to, 10, f"Has {who(name)} approved it (approval.granted after your request)? ({a_q})",
                      f"{driver}_decision_approved"),
-                hard(r_to, 20, f"Has the controller rejected it (approval.rejected after your request)? ({r_q})",
+                hard(r_to, 20, f"Has {who(name)} rejected it (approval.rejected after your request)? ({r_q})",
                      f"{driver}_decision_rejected")]
             if wake == "hooks":
                 states[name]["transitions"].append(
-                    soft("done", 30, "Have you recorded your request, so the run can end until the controller decides?"))
+                    soft("done", 30, f"Have you recorded your request, so the run can end until {who(name)} decides?"))
     begin = states.get("begin", {}).get("transitions")
     if mode == "ledger" and begin is not None and driver in DRIVERS:
         if wake == "poll":
@@ -179,7 +180,7 @@ def _finish(driver: str, states: dict[str, dict], mode: str, wake: str = "poll")
             for name, (a_to, _, r_to, _) in reviews.items():
                 for to, word in ((a_to, "approved"), (r_to, "rejected")):
                     p = _free_precedence(begin, 6)
-                    begin.insert(1, hard(to, p, f"Has the controller {word} your request at `{name}`, and you haven't acted on it yet?",
+                    begin.insert(1, hard(to, p, f"Has {who(name)} {word} your request at `{name}`, and you haven't acted on it yet?",
                                          f"{driver}_decided_{name}_{word}"))
             begin.sort(key=lambda t: t["precedence"])
     if wake == "hooks":
