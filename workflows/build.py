@@ -42,6 +42,7 @@ HARNESS_DIR = ROOT / ".widgex" / "harnesses"
 PROPOSED = ROOT / "workflows" / "proposed"
 HISTORY = ROOT / "workflows" / "history"
 PROMPTS = ROOT / "workflows" / "prompts"
+POLICY = ROOT / "structure" / "policy.json"
 # WidgeX resolves check.file relative to the harness file's folder and refuses anything outside
 # it, so the workflows point at a shim in .widgex/harnesses/checks/ that loads checks/ledger_checks.py.
 CHECKS = "checks/ledger_checks.py"
@@ -373,6 +374,13 @@ def diff(driver: str) -> str:
         parts.append("\n".join(difflib.unified_diff(
             old.get(name, "").splitlines(), text.splitlines(),
             f"live/prompts/{driver}/{name}", f"proposed/prompts/{driver}/{name}", lineterm="")))
+    patch = PROPOSED / f"policy.{driver}.json"
+    if patch.exists():
+        cur = POLICY.read_text(encoding="utf-8") if POLICY.exists() else "{}"
+        merged = json.dumps({**json.loads(cur), **json.loads(patch.read_text(encoding="utf-8"))}, indent=1)
+        parts.append("\n".join(difflib.unified_diff(cur.splitlines(), merged.splitlines(),
+                                                     "live/structure/policy.json", "proposed/structure/policy.json",
+                                                     lineterm="")))
     return "\n\n".join(p for p in parts if p.strip()) or "(no differences)"
 
 
@@ -408,9 +416,20 @@ def promote(conn, driver: str, ctx: dict, addresses: list[str], summary: str = "
             changed_prompts.append(p.name)
         shutil.rmtree(new_prompts)
     prop.unlink()
+    patch = PROPOSED / f"policy.{driver}.json"
+    policy_changed = []
+    if patch.exists():
+        changes = json.loads(patch.read_text(encoding="utf-8"))
+        current = json.loads(POLICY.read_text(encoding="utf-8")) if POLICY.exists() else {}
+        if POLICY.exists():
+            (HISTORY / driver / f"v{cur}").mkdir(parents=True, exist_ok=True)
+            shutil.copy2(POLICY, HISTORY / driver / f"v{cur}" / "policy.json")
+        POLICY.write_text(json.dumps({**current, **changes}, indent=1), encoding="utf-8")
+        policy_changed = sorted(changes)
+        patch.unlink()
     ev = db.append(conn, kind="workflow.adopted", entity=f"workflow:{driver}", payload={
         "version": cur + 1, "previous": cur, "file": str(live), "sha256": sha(live), "proposal_sha256": s,
-        "prompts_changed": changed_prompts, "summary": summary, "diff": diff_text[:20000],
+        "prompts_changed": changed_prompts, "policy_changed": policy_changed, "summary": summary, "diff": diff_text[:20000],
         "archived": str(HISTORY / driver / f"v{cur}") if cur else None},
         links=[{"rel": "addresses", "to": a} for a in addresses], **ctx)
     return {"driver": driver, "version": cur + 1, "live": str(live), "event": ev}

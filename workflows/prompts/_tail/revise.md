@@ -18,8 +18,11 @@ the repository root, the `cwd` you run tools from.
    - To change what a state *says*, write the whole new prompt to
      `workflows/proposed/prompts/<workflow>/<state>.md`. Start from the live
      `workflows/prompts/<workflow>/<state>.md` and change only what the feedback calls for.
-   - For a rule with a number in it (a tolerance, a contract price), put the number in
-     `structure/policy.json` and the rule in the prompt, so the controller can see and adjust it.
+   - For a rule with a number in it (a tolerance, a contract price), put the number in policy and
+     the rule in the prompt, so the controller can see and adjust it. **Never edit
+     `structure/policy.json` directly.** Write only the keys you add or change to
+     `workflows/proposed/policy.<workflow>.json` (a JSON object that is merged into the policy). It is
+     part of your proposal, shows in the diff, and takes effect only when the revision is promoted.
 4. Check it: `await api.harness_check(path)` with the absolute path of the proposed JSON. Fix and
    repeat until `ok` is true. Then record exactly that file as checked, passing the result on stdin:
    `api.run(["python", "-m", "workflows.build", "record-validation", "<workflow>", "--ok", "true",

@@ -63,6 +63,10 @@ def _out(obj: Any) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows consoles default to cp1252; ledger payloads carry any unicode (→, é, ...).
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     p = argparse.ArgumentParser(prog="ledgerdb", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--db", help="path to the database (default: $LEDGER_DB or data/ledger.db)")
