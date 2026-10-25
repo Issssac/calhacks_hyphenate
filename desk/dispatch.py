@@ -18,13 +18,13 @@ QUEUE = desk_home() / "dispatch"
 
 
 class DryRun:
-    def wake(self, workflow: str, text: str, keys: list[str] | None = None) -> dict:
+    def wake(self, workflow: str, text: str, keys: list[str] | None = None, last_event: str | None = None) -> dict:
         print(f"[dry-run] would wake {workflow}:\n{text}\n")
         return {"ok": False, "via": "dry-run"}
 
 
 class FileQueue:
-    def wake(self, workflow: str, text: str, keys: list[str] | None = None) -> dict:
+    def wake(self, workflow: str, text: str, keys: list[str] | None = None, last_event: str | None = None) -> dict:
         QUEUE.mkdir(parents=True, exist_ok=True)
         path = QUEUE / f"{workflow}-{int(time.time() * 1000)}.json"
         path.write_text(json.dumps({"workflow": workflow, "message": text, "queued_at": time.time()}), encoding="utf-8")
@@ -53,11 +53,31 @@ class WidgeXHooks:
             return None
         return json.loads(TOKENS.read_text(encoding="utf-8")).get(hook_id)
 
-    def wake(self, workflow: str, text: str, keys: list[str] | None = None) -> dict:
+    def busy(self, workflow: str, last_event: str | None) -> bool:
+        """Is the run our last wake-up started (or queued) still going? Then don't start another:
+        WidgeX gives every run a new session, and the running one drains the queue anyway."""
+        import requests
+        from workflows.build import HOOK_IDS
+
+        if not last_event:
+            return False
+        token = self._token(HOOK_IDS.get(workflow, ""))
+        if not token:
+            return False
+        try:
+            r = requests.get(f"http://127.0.0.1:{self.port}/v1/events/{last_event}", timeout=5,
+                             headers={"Authorization": f"Bearer {token}"})
+            return r.status_code == 200 and r.json().get("status") in ("queued", "running", "started")
+        except Exception:
+            return False
+
+    def wake(self, workflow: str, text: str, keys: list[str] | None = None, last_event: str | None = None) -> dict:
         import hashlib
         import requests
         from workflows.build import HOOK_IDS
 
+        if self.busy(workflow, last_event):
+            return {"ok": False, "busy": True, "via": "widgex-hook", "detail": f"{last_event} still running"}
         if time.time() < self.backoff_until.get(workflow, 0):
             return {"ok": False, "via": "widgex-hook", "detail": "backing off after a failure"}
         hook = HOOK_IDS.get(workflow)

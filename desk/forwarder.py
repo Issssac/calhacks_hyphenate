@@ -125,6 +125,12 @@ def plan(conn) -> dict[str, list[dict]]:
     return todo
 
 
+def last_event(conn, workflow: str) -> str | None:
+    row = conn.execute("SELECT json_extract(payload, '$.detail.eventId') FROM events WHERE kind = 'note.dispatch'"
+                       " AND entity = ? ORDER BY seq DESC LIMIT 1", (f"dispatch:{workflow}",)).fetchone()
+    return row[0] if row and row[0] else None
+
+
 def message(workflow: str, reasons: list[dict]) -> str:
     lines = [f"New work for the {workflow} workflow (from the forwarder):"] + [f"- {r['what']}" for r in reasons[:20]]
     if len(reasons) > 20:
@@ -144,7 +150,12 @@ def run_once(conn, dispatcher, dry_run: bool = False) -> dict:
         if dry_run:
             woken[wf] = {"dry_run": True, "reasons": [r["what"] for r in reasons]}
             continue
-        result = dispatcher.wake(wf, text, [r["key"] for r in reasons])
+        result = dispatcher.wake(wf, text, [r["key"] for r in reasons], last_event(conn, wf))
+        if result.get("busy"):
+            # Its current run will find this work in the ledger; nothing is recorded, so if any of it
+            # is still there when that run ends, the next pass wakes the workflow again.
+            woken[wf] = {"skipped": "previous run still going"}
+            continue
         woken[wf] = result
         if result.get("ok"):
             db.append(conn, actor=ACTOR, role="tracker", kind="note.dispatch", entity=f"dispatch:{wf}",
