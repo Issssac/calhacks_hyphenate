@@ -1,4 +1,5 @@
-"""Set up Halyard Marine Supply's master data in Odoo. Idempotent: safe to run twice.
+"""Set up the loaded world's master data in Odoo (DESK_WORLD; default Halyard Marine Supply).
+Idempotent: safe to run twice.
 
     python -m seed.company            (uses ODOO_DB, default `revenue`)
 
@@ -38,11 +39,21 @@ def run(o: Odoo) -> dict:
     exempt_fp = _one(o, "account.fiscal.position", [("name", "=", "Resale exempt")],
                      {"name": "Resale exempt", "tax_ids": [(5, 0, 0), (0, 0, {"tax_src_id": tax, "tax_dest_id": False})]})
     out["tax"] = {"sale_tax_id": tax, "resale_exempt_fiscal_position": exempt_fp}
+    oos_fp = None
+    if any(cu.get("out_of_state") for cu in world.CUSTOMERS):
+        oos_fp = _one(o, "account.fiscal.position", [("name", "=", "Out of state (no CA tax)")],
+                      {"name": "Out of state (no CA tax)",
+                       "tax_ids": [(5, 0, 0), (0, 0, {"tax_src_id": tax, "tax_dest_id": False})]})
+        out["tax"]["out_of_state_fiscal_position"] = oos_fp
 
     vendors = {}
     for v in world.VENDORS:
-        pid = _one(o, "res.partner", [("name", "=", v["name"])],
-                   {"name": v["name"], "email": v["email"], "is_company": True, "supplier_rank": 1})
+        vals = {"name": v["name"], "email": v["email"], "is_company": True, "supplier_rank": 1}
+        if "authorized" in v:
+            vals["comment"] = (f"{v.get('kind', 'supplier')}; "
+                               f"{'authorized source' if v['authorized'] else 'NOT an authorized source'}; "
+                               f"typical lead time {v.get('lead_days', '?')} days")
+        pid = _one(o, "res.partner", [("name", "=", v["name"])], vals)
         bank = _one(o, "res.bank", [("name", "=", v["bank"]["bank"])],
                     {"name": v["bank"]["bank"], "bic": v["bank"]["routing"]})
         _one(o, "res.partner.bank", [("acc_number", "=", v["bank"]["account"])],
@@ -52,19 +63,32 @@ def run(o: Odoo) -> dict:
 
     products = {}
     for p in world.PRODUCTS:
-        tmpl = _one(o, "product.template", [("name", "=", p["name"])], {
-            "name": p["name"], "type": "consu", "list_price": p["list"], "standard_price": p["cost"],
-            "sale_ok": True, "purchase_ok": True, "invoice_policy": "order", "purchase_method": "receive",
-            "taxes_id": [(6, 0, [tax])], "supplier_taxes_id": [(5, 0, 0)]})
-        _one(o, "product.supplierinfo", [("product_tmpl_id", "=", tmpl), ("partner_id", "=", vendors[p["vendor"]])],
-             {"product_tmpl_id": tmpl, "partner_id": vendors[p["vendor"]], "price": p["cost"], "min_qty": 1})
+        vals = {"name": p["name"], "type": "consu", "list_price": p["list"], "standard_price": p["cost"],
+                "sale_ok": True, "purchase_ok": True, "invoice_policy": "order", "purchase_method": "receive",
+                "taxes_id": [(6, 0, [tax])], "supplier_taxes_id": [(5, 0, 0)]}
+        if p.get("mpn"):
+            vals["default_code"] = p["mpn"]
+        if p.get("description"):
+            vals["description_sale"] = f"{p.get('manufacturer', '')} {p['description']}".strip()
+        tmpl = _one(o, "product.template", [("name", "=", p["name"])], vals)
+        # One supplier price per (supplier, quantity break). A one-supplier world has a single 1-piece row.
+        offers = p.get("offers") or [{"vendor": p["vendor"], "breaks": [(1, p["cost"])]}]
+        for off in offers:
+            for min_qty, price in off["breaks"]:
+                si = {"product_tmpl_id": tmpl, "partner_id": vendors[off["vendor"]], "price": price, "min_qty": min_qty}
+                if "lead_days" in off:
+                    si["delay"] = int(off["lead_days"])
+                _one(o, "product.supplierinfo",
+                     [("product_tmpl_id", "=", tmpl), ("partner_id", "=", vendors[off["vendor"]]),
+                      ("min_qty", "=", min_qty)], si)
         products[p["name"]] = tmpl
     out["products"] = products
 
     customers = {}
     for cu in world.CUSTOMERS:
+        fp = (oos_fp if cu.get("out_of_state") else exempt_fp) if cu["exempt"] else False
         vals = {"name": cu["name"], "email": cu["email"], "is_company": True, "customer_rank": 1,
-                "comment": cu["note"], "property_account_position_id": exempt_fp if cu["exempt"] else False}
+                "comment": cu["note"], "property_account_position_id": fp}
         pid = _one(o, "res.partner", [("name", "=", cu["name"])], vals)
         if cu.get("contract") and not cu.get("contract_in_odoo", True):
             # Make sure no earlier seed left the contract in Odoo.
