@@ -30,6 +30,8 @@ CONTROL_FILES = [
     "ledgerdb/views.sql", "ledgerdb/roles.toml",
     "connectors/odoo.py", "connectors/increase.py", "connectors/inbox.py", "connectors/gmail.py",
     "workflows/build.py", "recon.py",
+    # Pricing: how a recommendation is computed. The agent supplies judgement calls; it can't change these.
+    "pricing/sourcing.py", "pricing/features.py", "pricing/model.py",
 ]
 
 

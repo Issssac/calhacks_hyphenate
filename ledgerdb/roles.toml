@@ -31,6 +31,22 @@ kinds = ["payment.received", "payment.applied", "payment.short", "payment.over",
 [roles.reconcile]
 kinds = ["recon.*", "approval.requested"]
 
+# Prices RFQs: records its judgement calls, runs the model (which records the recommendation), and
+# emails finance. It cannot approve a price or send a quote to a customer.
+[roles.pricing]
+kinds = ["pricing.assessment", "pricing.recommended", "pricing.model_fitted", "pricing.outcome",
+         "mail.sent", "approval.requested"]
+
+# Sends the customer the quote finance approved (connectors/mailer.py refuses an unapproved one).
+[roles.quoting]
+kinds = ["quote.sent", "mail.sent"]
+
+# Finance approves or changes a price recommendation, by replying to the report email. The reply is
+# parsed in code (desk/finance_reply.py), and is written --on-behalf-of human:<their address>.
+[roles.finance]
+kinds = ["approval.granted", "approval.rejected", "feedback.recorded"]
+human = true
+
 # The hard-transition checks in checks/ledger_checks.py. Code, not an agent.
 [roles.checker]
 kinds = ["check.result"]

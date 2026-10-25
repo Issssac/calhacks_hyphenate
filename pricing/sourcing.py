@@ -72,6 +72,13 @@ def cost_curve(offers: list[dict], tiers: tuple[int, ...] = TIERS, days_availabl
     out = []
     for q in tiers:
         c = choose(offers, q, days_available, allow_broker)
+        if c["chosen"] is None and days_available is not None:
+            # Nobody can make the date. Quote the earliest delivery that can be made, and say it's late.
+            late = choose(offers, q, None, allow_broker)
+            if late["chosen"] is not None:
+                c = {**late, "flags": late["flags"] + [
+                    f"can't meet the need-by date: earliest delivery {late['chosen']['lead_days']} days "
+                    f"({days_available} available)"]}
         ch = c["chosen"]
         out.append({"qty": q, "unit_cost": ch["unit_cost"] if ch else None, "vendor": ch["vendor"] if ch else None,
                     "authorized": ch["authorized"] if ch else None, "lead_days": ch["lead_days"] if ch else None,
