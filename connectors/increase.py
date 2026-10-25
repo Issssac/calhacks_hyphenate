@@ -211,6 +211,15 @@ def vendor_accounts_on_file(vendor: str) -> set[tuple[str, str]]:
     return out
 
 
+def destination_problem(vendor: str, routing: str, account: str) -> str | None:
+    """Why a payment to this account must be refused, or None if it's the vendor's account on file."""
+    on_file = vendor_accounts_on_file(vendor)
+    if (str(routing), str(account)) in on_file:
+        return None
+    return (f"{routing}/{account} is not a bank account on file for {vendor!r} in Odoo "
+            f"({len(on_file)} on file). Refusing to pay.")
+
+
 def send(conn, b: Increase, entity: str, ctx: dict) -> dict:
     """Pay a vendor by ACH, only if the ledger's approval gate passes for this bill payment."""
     db.check_post(conn, entity)
@@ -231,10 +240,9 @@ def send(conn, b: Increase, entity: str, ctx: dict) -> dict:
                             f"{bill.get('vendor')!r} (Odoo: {partner[1] if partner else None!r}). Refusing to pay.")
     # Pay only to the vendor's bank account on file in the books, whatever the payload says.
     # The payload was written by an agent; the vendor master is the source of truth.
-    on_file = vendor_accounts_on_file(pay.get("vendor") or "")
-    if (str(dest["routing_number"]), str(dest["account_number"])) not in on_file:
-        raise BankError(f"{entity}: {dest['routing_number']}/{dest['account_number']} is not a bank account on file "
-                        f"for {pay.get('vendor')!r} in Odoo ({len(on_file)} on file). Refusing to pay.")
+    problem = destination_problem(pay.get("vendor") or "", dest["routing_number"], dest["account_number"])
+    if problem:
+        raise BankError(f"{entity}: {problem}")
     amount = round(sum(float(a["amount"]) for a in pay.get("applications", [])), 2)
     bank = load_bank()
     # Ids restart with each ledger (run), so the key must also name the ledger: its genesis row's hash.

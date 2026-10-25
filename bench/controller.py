@@ -168,10 +168,29 @@ def suggest(conn, entity: str, workflow: str, req: dict) -> dict:
     return {**base, "decision": "approve", "note": "Approved."}
 
 
-def decide(conn, entity: str, decision: str, note: str, also: list[str] | None = None) -> list[dict]:
+def decidable(conn, entity: str) -> str | None:
+    """Why this item must not get a decision now, or None if it may."""
+    if conn.execute("SELECT 1 FROM events WHERE entity = ? AND kind = 'erp.posted' AND seq >"
+                    " COALESCE((SELECT MAX(seq) FROM events WHERE entity = ? AND (kind LIKE '%.drafted' OR kind LIKE '%.amended')), 0)",
+                    (entity, entity)).fetchone():
+        return "already posted"
+    last_def = conn.execute("SELECT MAX(seq) FROM events WHERE entity = ? AND kind NOT LIKE 'approval.%'"
+                            " AND (kind LIKE '%.drafted' OR kind LIKE '%.amended' OR kind = 'approval.requested')",
+                            (entity, )).fetchone()[0] or 0
+    if conn.execute("SELECT 1 FROM events WHERE entity = ? AND kind IN ('approval.granted','approval.rejected') AND seq > ?",
+                    (entity, last_def)).fetchone():
+        return "already decided since its latest draft or request"
+    return None
+
+
+def decide(conn, entity: str, decision: str, note: str, also: list[str] | None = None, supersede: bool = False) -> list[dict]:
     kind = "approval.granted" if decision == "approve" else "approval.rejected"
     out = []
     for e in [entity] + [a for a in (also or []) if a != entity]:
+        why = None if supersede else decidable(conn, e)
+        if why:
+            out.append({"entity": e, "skipped": why})
+            continue
         out.append(db.append(conn, actor=ACTOR, role="controller", on_behalf_of=CONTROLLER, kind=kind, entity=e,
                              payload={"note": note, "via": "benchmark controller (answer key)"}, workflow="controller"))
     return out
@@ -187,6 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("decision", choices=["approve", "reject"])
     d.add_argument("--note", required=True)
     d.add_argument("--also", action="append", default=[])
+    d.add_argument("--supersede", action="store_true", help="a person correcting an earlier decision")
     sub.add_parser("auto")
     args = p.parse_args(argv)
     conn = db.connect()
@@ -195,7 +215,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "pending":
             out_(pending(conn))
         elif args.cmd == "decide":
-            out_(decide(conn, args.entity, args.decision, args.note, args.also))
+            out_(decide(conn, args.entity, args.decision, args.note, args.also, args.supersede))
         else:
             done = []
             for r in pending(conn):

@@ -250,9 +250,17 @@ def _decided(driver: str, state: str, word: str) -> Callable[..., bool]:
 
     def check(*_a: Any, **_k: Any) -> bool:
         conn = _conn()
-        req = latest_request(conn, driver, state)
-        dec = decision_unacted(conn, req, driver) if req else None
-        ok = bool(dec) and dec[0] == want
+        # Every item this workflow asked about at this review point (its latest request per item),
+        # oldest first: a decision on an earlier item must not be buried by later requests.
+        req, dec = None, None
+        for seq, entity, payload in conn.execute(
+                "SELECT MAX(seq), entity, payload FROM events WHERE kind = 'approval.requested' AND workflow = ?"
+                " AND json_extract(payload, '$.review_state') = ? GROUP BY entity ORDER BY MAX(seq)", (driver, state)):
+            d = decision_unacted(conn, (seq, entity, json.loads(payload)), driver)
+            if d and d[0] == want:
+                req, dec = (seq, entity, json.loads(payload)), d
+                break
+        ok = bool(dec)
         if ok:
             # Point the agent at the item: the transition is about to be taken.
             try:

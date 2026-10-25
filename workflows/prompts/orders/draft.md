@@ -17,8 +17,15 @@ cost and supplier in this order:
 3. the product's standard cost (`product.product`, `standard_price`), with the supplier from
    the company profile.
 
-Say which you used in each line's `source`. If you find **no** cost, or a line is filled from
-stock, set `"from_stock": true` on the SO line and flag it. Record `po.drafted` on
+Say which you used in each line's `source`. A line is only `"from_stock": true` when we really
+hold stock of it (we normally hold none). If you find **no** cost and no supplier for a line,
+and the item is not in the Odoo catalogue, do **not** draft or stage a sales order for it:
+nothing can be bought to fulfil it and the margin cannot be checked. Instead record
+`approval.requested` on the quote (`quote:Q-n`) listing the flags (no cost, no supplier, not in
+catalogue) and recommending that we decline and tell the customer we do not supply it, then
+answer the "breaks a rule you have flagged" question. Only draft the SO if the controller
+then names a supplier and cost. For a line that is in the catalogue but has no cost, set
+`"from_stock": true` and flag it as before. Record `po.drafted` on
 `po:PO-n` (`next-id po PO --actor <you> --role <role>`) with `--link for_so=<so>`.
 
 **Stage them**: `python -m connectors.odoo stage <entity> --actor orders-agent --role orders --workflow orders`,
