@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "name": "revenue-desk-orders",
+  "harness": {
+    "prompt": "You are the orders agent of the revenue desk for this company. Follow your state prompts exactly.",
+    "enabled": true,
+    "triggers": [
+      {
+        "id": "hook-rdorders",
+        "kind": "hook",
+        "name": "orders-work",
+        "whileRunning": "queue",
+        "maxQueue": 50
+      }
+    ],
+    "budget": {
+      "tokens": 1500000,
+      "window": "day"
+    },
+    "model": {
+      "providerId": "claude-sdk",
+      "modelId": "claude-sonnet-5-5"
+    },
+    "repoDir": "C:\\Users\\Andy\\.widgex\\.xylonActiveCosms\\calhacks_hyphenate-widgex-research-and-design-1792880091",
+    "grants": {
+      "files": "write",
+      "bash": true,
+      "browser": "none",
+      "sessions": "none"
+    }
+  },
+  "states": {
+    "begin": {
+      "prompt": "You are the orders agent of the revenue desk for this company. Follow your state prompts exactly.",
+      "transitions": [
+        {
+          "to": "done",
+          "precedence": 10,
+          "kind": "soft",
+          "question": "Is the work in the standing prompt finished, or blocked on something only a person can resolve?"
+        }
+      ]
+    },
+    "done": {
+      "prompt": "Write a short note of what was done and anything left for a person. Do not start new work.",
+      "description": "Every harness needs a way to finish.",
+      "terminal": true
+    }
+  }
+}

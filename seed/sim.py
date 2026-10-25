@@ -205,9 +205,11 @@ def main(argv: list[str] | None = None) -> int:
     conn = db.connect()
     db.init(conn)
     if args.cmd == "quotes":
-        v = conn.execute("SELECT version FROM workflow_current WHERE entity = ?",
-                         (f"workflow:{args.if_revised}",)).fetchone() if args.if_revised else None
-        if args.if_revised and not (v and v[0] and int(v[0]) >= 2):
+        # A revision learned in this run: adopted in answer to feedback (not carried over by a reset).
+        v = conn.execute("SELECT 1 FROM events e WHERE e.kind = 'workflow.adopted' AND e.entity = ?"
+                         " AND EXISTS (SELECT 1 FROM doc_links l WHERE l.seq = e.seq AND l.rel = 'addresses')"
+                         " LIMIT 1", (f"workflow:{args.if_revised}",)).fetchone() if args.if_revised else None
+        if args.if_revised and not v:
             out = {"waiting": f"{args.if_revised} has not adopted a revision yet"}
         else:
             out = send_quotes(conn, args.phase, args.gmail)

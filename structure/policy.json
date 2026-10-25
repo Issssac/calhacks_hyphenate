@@ -11,13 +11,6 @@
   "price_tolerance_abs": "5 cents floor so cheap rope per-foot prices are not over-tight.",
   "total_tie_abs": "One cent: documents must tie exactly.",
   "controller": "No named person found; placeholder until one is set.",
-  "idle_minutes": "Default; volume is small.",
-  "contract_prices": "Controller overrule F-1001: Bay Rigging Co is on contract pricing (shackle $4.50, double-braid $1.70/ft). Always use a customer's contract price over list."
- },
- "contract_prices": {
-  "Bay Rigging Co": {
-   "Galvanized Shackle 1/2in": 4.5,
-   "Double-Braid Line 1/2in (ft)": 1.7
-  }
+  "idle_minutes": "Default; volume is small."
  }
 }

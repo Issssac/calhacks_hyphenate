@@ -2,6 +2,30 @@
   "version": 2,
   "name": "revenue-desk-architect",
   "description": "Investigates the books and compiles the revenue desk's driver workflows",
+  "harness": {
+    "prompt": "Investigates the books and compiles the revenue desk's driver workflows",
+    "enabled": true,
+    "triggers": [
+      {
+        "id": "hook-816d04d07153",
+        "kind": "hook",
+        "name": "revenue-desk-architect",
+        "whileRunning": "queue",
+        "maxQueue": 10
+      }
+    ],
+    "budget": {
+      "tokens": 1000000,
+      "window": "day"
+    },
+    "repoDir": "C:\\Users\\Andy\\.widgex\\.xylonActiveCosms\\calhacks_hyphenate-widgex-research-and-design-1792880091",
+    "grants": {
+      "files": "read",
+      "bash": false,
+      "browser": "none",
+      "sessions": "none"
+    }
+  },
   "states": {
     "begin": {
       "prompt": "Revenue desk / workflow `architect` / state `begin`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/architect/begin.md and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `architect-agent` with role `architect`; pass --workflow architect on every ledger write.",
@@ -46,21 +70,23 @@
     },
     "propose": {
       "prompt": "Revenue desk / workflow `architect` / state `propose`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/architect/propose.md and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `architect-agent` with role `architect`; pass --workflow architect on every ledger write.",
-      "review": {},
+      "review": {
+        "reviewer": "human"
+      },
       "transitions": [
         {
           "to": "spawn",
           "precedence": 10,
           "kind": "human",
-          "decision": "approve",
-          "question": "Adopt this pipeline and start its agents?"
+          "question": "Adopt this pipeline and start its agents?",
+          "decision": "approve"
         },
         {
           "to": "design",
           "precedence": 20,
           "kind": "human",
-          "decision": "reject",
-          "question": "Send the design back (say what to change in the note)?"
+          "question": "Send the design back (say what to change in the note)?",
+          "decision": "reject"
         }
       ]
     },
@@ -77,8 +103,7 @@
     },
     "done": {
       "prompt": "Revenue desk / workflow `architect` / state `done`.\nRead C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/architect/done.md if it exists, otherwise C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_tail/done.md, and follow it exactly.\nThe rules in C:/Users/Andy/.widgex/.xylonActiveCosms/calhacks_hyphenate-widgex-research-and-design-1792880091/workflows/prompts/_shared.md apply throughout. You are actor `architect-agent` with role `architect`; pass --workflow architect on every ledger write.",
-      "terminal": true,
-      "transitions": []
+      "terminal": true
     }
   }
 }
