@@ -459,6 +459,13 @@ def register_payment(conn, o: Odoo, entity: str, applications: list[tuple[str, f
 
 
 def _pay_bills(conn, o: Odoo, entity: str, ctx: dict) -> dict:
+    # The books follow the bank: record a vendor payment only once the money has actually left.
+    approved = conn.execute("SELECT MAX(seq) FROM events WHERE entity = ? AND kind = 'approval.granted'", (entity,)).fetchone()[0] or 0
+    sent = conn.execute("SELECT 1 FROM events WHERE entity = ? AND kind = 'billpayment.sent' AND seq > ?"
+                        " AND json_extract(payload, '$.ach_transfer_id') IS NOT NULL", (entity, approved)).fetchone()
+    if not sent:
+        raise OdooError(f"{entity}: no bank transfer recorded since its approval; send it first "
+                        "(`python -m connectors.increase send`), then record it in the books")
     pay = db.latest_payload(conn, entity) or {}
     odoo_ids, journals = [], []
     for app in pay.get("applications", []):
