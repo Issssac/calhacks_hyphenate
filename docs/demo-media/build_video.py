@@ -142,7 +142,7 @@ def segments() -> list[dict]:
                   "Everything is appended to one hash-chained ledger; a posting gate sits in front of Odoo and the bank."]},
         {"name": "gate", "frames": [
             ("text", part("gate", 1, 16), "Posting without approval, or approving your own work: refused in code", 11),
-            ("text", part("gate", 17, 38, header=True),
+            ("text", part("gate", 17, len(lines("gate")), header=len(lines("gate")) <= 38),
              "Every number traces back to the email, the PDF page and the Odoo record", 11)],
          "cues": ["Agents draft, but they can't commit.",
                   "Frame 1: confirming in Odoo without approval is refused before Odoo is even called; so is approving your own work.",

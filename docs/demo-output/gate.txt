@@ -36,3 +36,6 @@
     seq 1240  erp.posted        payment:P-1004           by cash-agent           odoo:account.paymen
     seq 1248  approval.granted  payment:P-1004           by model:controller
     seq 1249  approval.granted  banktxn:sandbox_transaction_x50der9q2e4dls4ksk95 by model:controller
+    seq 1264  approval.granted  billpayment:BP-1005      by model:controller
+    seq 1270  je.posted         je:billpayment-BP-1005-25 by cash-agent           odoo:account.move/
+    seq 1271  erp.posted        billpayment:BP-1005      by cash-agent           odoo:account.paymen
