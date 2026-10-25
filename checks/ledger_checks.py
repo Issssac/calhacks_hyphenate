@@ -92,6 +92,8 @@ def _actionable(conn, driver: str) -> list[dict]:
                 continue  # a payment is already proposed for it
             if r["reason"] == "unapplied cash" and _held(conn, r["entity"]):
                 continue  # the controller chose to hold it unapplied
+            if r["reason"] == "bank receipt to match" and _last(conn, r["entity"], "recon.explained"):
+                continue  # explained as not this run's customer money (e.g. the opening position)
             keep.append(r)
         rows = keep
     if driver == "reconcile":
