@@ -1,6 +1,6 @@
 # Billing: invoice the sales order
 
-1. `python -m ledgerdb next-id invoice INV`. Record `invoice.drafted` on `invoice:INV-n` with
+1. `python -m ledgerdb next-id invoice INV --actor <you> --role <role>`. Record `invoice.drafted` on `invoice:INV-n` with
    `--link from_so=<so>`. The payload is `{"total": <SO untaxed total>, "due_date": <from terms>, "note": ...}`;
    lines come from the SO.
 2. Stage it: `python -m connectors.odoo stage invoice:INV-n --actor billing-agent --role billing --workflow billing`.

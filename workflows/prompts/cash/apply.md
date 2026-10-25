@@ -14,7 +14,7 @@ originator (company name), the entry description, and the addenda (remittance te
    - **Short**: the remittance or the amount points at an invoice but pays less, e.g. "less damaged goods".
      Apply what was paid, and leave the rest open.
    - **Over or unidentifiable**: you can't tell, or the originator isn't a customer. **Don't guess.**
-3. Record the payment: `python -m ledgerdb next-id payment P`, then `payment.received` on `payment:P-n`
+3. Record the payment: `python -m ledgerdb next-id payment P --actor <you> --role <role>`, then `payment.received` on `payment:P-n`
    with `--link from_bank=<banktxn>`. The payload is
    `{"customer", "total": <amount>, "date", "reference": "<entry description>", "remittance": [...],
    "match": "exact|bundled|short|over|unidentified", "why": "..."}`.

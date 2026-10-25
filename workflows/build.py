@@ -437,10 +437,54 @@ def _controls(spec: dict) -> set[tuple]:
     return out
 
 
-def weakened(live: dict, new: dict) -> list[str]:
-    """A revision may add controls, never remove them."""
+# States whose instructions write to the books or move money. Reaching one must always go
+# through a code check or a controller decision, never only through the agent's own word.
+WRITE_STATES = {"orders": {"post"}, "billing": {"invoice", "invoice_fix", "bill_post"},
+                "cash": {"apply", "apply_approved", "send_payment"}, "intake": set(), "reconcile": set()}
+
+
+def _entry_edges(spec: dict, targets: set[str]) -> set[tuple]:
+    out = set()
+    for name, st in (spec.get("states") or {}).items():
+        for t in st.get("transitions", []):
+            if t.get("to") in targets:
+                fn = (t.get("check") or {}).get("function") or ""
+                if t.get("kind") == "human" or "_decision_" in fn:
+                    # A person's decision, on a card or through the ledger, is the same gate.
+                    out.add((name, t["to"], "decision", None, None))
+                else:
+                    out.add((name, t["to"], t.get("kind"), fn or None, None))
+    return out
+
+
+def bypasses(spec: dict, write_states: set[str]) -> list[str]:
+    """Write states reachable from begin by soft (agent-asserted) edges alone."""
+    states = spec.get("states") or {}
+    seen, todo = {"begin"}, ["begin"]
+    while todo:
+        for t in states.get(todo.pop(), {}).get("transitions", []):
+            if t.get("kind") == "soft" and t.get("to") in states and t["to"] not in seen:
+                seen.add(t["to"])
+                todo.append(t["to"])
+    return [f"{w} is reachable from begin without any code check or controller decision"
+            for w in sorted(write_states & seen)]
+
+
+def weakened(live: dict, new: dict, driver: str | None = None) -> list[str]:
+    """A revision may add controls, never remove them, and may not open a new way into a write state."""
     missing = _controls(live) - _controls(new)
-    return [f"removes {kind} {what!r}" for kind, what in sorted(missing, key=str)]
+    out = [f"removes {kind} {what!r}" for kind, what in sorted(missing, key=str)]
+    writes = WRITE_STATES.get(driver or new.get("name", ""), set())
+    added = _entry_edges(new, writes) - _entry_edges(live, writes)
+    out += [f"adds a new way into {to!r} (from {frm!r}, {kind}{', check ' + fn if fn else ''})"
+            for frm, to, kind, fn, _ in sorted(added, key=str)]
+    out += bypasses(new, writes)
+    return out
+
+
+def manifest_problems(conn) -> list[str]:
+    from ledgerdb import manifest
+    return [f"control file {c['file']}: {c['problem']}" for c in manifest.changes(conn)]
 
 
 def policy_patch_problems(patch: dict) -> list[str]:
@@ -473,7 +517,10 @@ def promote(conn, driver: str, ctx: dict, addresses: list[str], summary: str = "
     spec_new = json.loads(prop.read_text(encoding="utf-8"))
     problems = structural_problems(spec_new)
     if live_path(driver).exists():
-        problems += weakened(json.loads(live_path(driver).read_text(encoding="utf-8")), spec_new)
+        problems += weakened(json.loads(live_path(driver).read_text(encoding="utf-8")), spec_new, driver)
+    else:
+        problems += bypasses(spec_new, WRITE_STATES.get(driver, set()))
+    problems += manifest_problems(conn)
     patch_file = PROPOSED / f"policy.{driver}.json"
     if patch_file.exists():
         problems += policy_patch_problems(json.loads(patch_file.read_text(encoding="utf-8")))
@@ -488,7 +535,8 @@ def promote(conn, driver: str, ctx: dict, addresses: list[str], summary: str = "
     if not approval and cur == 0:
         # First version of a pipeline: the controller's approval of the architect's design covers it.
         design = conn.execute("SELECT seq, actor FROM events WHERE entity = 'structure:design'"
-                              " AND kind = 'approval.granted' ORDER BY seq DESC LIMIT 1").fetchone()
+                              " AND kind = 'approval.granted' AND seq > ? ORDER BY seq DESC LIMIT 1",
+                              (ok[0],)).fetchone()
         approval = {"seq": design[0], "actor": design[1], "via": "pipeline approval"} if design else None
     if not approval:
         raise SystemExit(f"refusing to promote {driver}: no controller approval.granted on workflow:{driver} after "

@@ -7,7 +7,7 @@ If your focus is a `mail:` item, record the bill from it first.
 2. Find the PO it bills. Match on the PO number they quote, the vendor, and the items:
    `python -m ledgerdb query "SELECT entity, payload FROM events WHERE kind='po.drafted'"` and
    `python -m connectors.odoo read purchase.order '[["partner_id.name","ilike","<vendor>"]]' name state`.
-3. `python -m ledgerdb next-id bill B`. Record `bill.received` on `bill:B-n` with
+3. `python -m ledgerdb next-id bill B --actor <you> --role <role>`. Record `bill.received` on `bill:B-n` with
    `--link from_po=<po>` and `--link from_mail=<mail>`. The payload is
    `{"vendor", "vendor_ref", "date", "due_date", "lines": [{"item", "qty", "unit_cost", "source"}], "total"}`,
    with every line cited.

@@ -19,7 +19,7 @@ Record it: `--kind mail.classified --entity <mail> --payload @...` with
 `{"class": ..., "reason": "<one line>", "counterparty": "<who>", ...}`.
 
 For a new quote:
-- `python -m ledgerdb next-id quote Q`, then append `quote.received` on `quote:Q-n` with
+- `python -m ledgerdb next-id quote Q --actor <you> --role <role>`, then append `quote.received` on `quote:Q-n` with
   `--link from_mail=<mail>`, using the mail's sources as `--source`.
 - Re-focus on the quote: `python -m ledgerdb focus intake quote:Q-n ...`.
 

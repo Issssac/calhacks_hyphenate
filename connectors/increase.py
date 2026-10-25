@@ -218,6 +218,17 @@ def send(conn, b: Increase, entity: str, ctx: dict) -> dict:
     dest = pay.get("vendor_bank") or {}
     if not dest.get("routing_number") or not dest.get("account_number"):
         raise BankError(f"{entity} has no vendor_bank routing_number/account_number")
+    # The payment must be to the vendor on every bill it pays, in the ledger and in Odoo.
+    from . import odoo
+    o = odoo.Odoo()
+    for app in pay.get("applications", []):
+        bill = db.latest_payload(conn, app["bill"]) or {}
+        ref = db.erp_ref(conn, app["bill"], posted_only=True) or {}
+        partner = o.read("account.move", [ref["id"]], ["partner_id"])[0]["partner_id"] if ref.get("id") else None
+        names = {(bill.get("vendor") or "").lower(), (partner[1] if partner else "").lower()}
+        if names != {(pay.get("vendor") or "").lower()}:
+            raise BankError(f"{entity} pays {pay.get('vendor')!r}, but {app['bill']} is from "
+                            f"{bill.get('vendor')!r} (Odoo: {partner[1] if partner else None!r}). Refusing to pay.")
     # Pay only to the vendor's bank account on file in the books, whatever the payload says.
     # The payload was written by an agent; the vendor master is the source of truth.
     on_file = vendor_accounts_on_file(pay.get("vendor") or "")

@@ -74,6 +74,8 @@ def run(conn, ctx: dict, use_odoo: bool = True, use_bank: bool = True) -> dict:
         d, s = bank(conn, bal)
         differences += d
         detail["bank"] = s
+    from ledgerdb import manifest
+    differences += [{"kind": "control_code", **c} for c in manifest.changes(conn)]
     ok = not differences
     ev = db.append(conn, kind="recon.result", entity="recon:books",
                    payload={"ok": ok, "differences": differences, **detail}, **ctx)

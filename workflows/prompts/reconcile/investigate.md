@@ -11,7 +11,7 @@ Take each difference in the latest `recon.result` (`python -m ledgerdb state rec
   or it isn't customer money at all (an opening probe, interest, a refund).
 - **bank_tracking** (Increase's balance doesn't equal what we tracked): a transaction we missed, or one tracked twice.
 
-For each difference, record `recon.finding` on `recon:F-n` (`next-id recon F`) with
+For each difference, record `recon.finding` on `recon:F-n` (`next-id recon F --actor <you> --role <role>`) with
 `{"difference": <the item>, "cause": "...", "evidence": [<citations>], "class": "timing|error|external|benign",
 "responsible": "<workflow or person or 'outside the desk'>", "fix": "..."}`.
 

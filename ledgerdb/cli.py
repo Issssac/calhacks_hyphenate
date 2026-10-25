@@ -155,7 +155,9 @@ def main(argv: list[str] | None = None) -> int:
                            workflow_version=args.workflow_version))
             return 0
 
-        if args.cmd == "next-id" and args.actor:
+        if args.cmd == "next-id":
+            if not args.actor or not args.role:
+                raise db.LedgerError("next-id reserves the id for you: pass --actor and --role")
             conn = db.connect(path)
             _out({"id": db.next_id(conn, args.entity_type, args.prefix, actor=args.actor, role=args.role),
                   "reserved": True})

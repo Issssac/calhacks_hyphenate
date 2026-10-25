@@ -17,7 +17,7 @@ overrule F-1002). Record `approval.requested` on the quote with the flag, recomm
 controller decline it, and answer the "breaks a rule you have flagged" question. Only draft such a
 line if a controller note names a supplier and cost.
 
-**Sales order.** `python -m ledgerdb next-id so SO`. Payload (see `connectors/odoo.py`):
+**Sales order.** `python -m ledgerdb next-id so SO --actor <you> --role <role>`. Payload (see `connectors/odoo.py`):
 `{"customer", "customer_email", "customer_ref", "lines": [{"item", "description", "qty",
 "unit_price", "source"}], "total"}`. Prices and quantities come from the quote, each line keeping
 its `source`. Record `so.drafted` with `--link from_quote=<quote>`. For an amendment, record
@@ -33,7 +33,7 @@ cost and supplier in this order:
 
 Say which you used in each line's `source`. If you find **no** cost, or a line is filled from
 stock, set `"from_stock": true` on the SO line and flag it. Record `po.drafted` on
-`po:PO-n` (`next-id po PO`) with `--link for_so=<so>`.
+`po:PO-n` (`next-id po PO --actor <you> --role <role>`) with `--link for_so=<so>`.
 
 **Stage them**: `python -m connectors.odoo stage <entity> --actor orders-agent --role orders --workflow orders`,
 first the SO, then each PO. Staging creates the draft quotation or RFQ in Odoo.

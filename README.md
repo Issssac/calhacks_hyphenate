@@ -50,6 +50,14 @@ Claude agents), a local Odoo 18, and an Increase sandbox bank.
   run as one OS user, so one could also open the SQLite file directly; `ledgerdb verify` would show
   the tampering but not prevent it. Real enforcement needs identity the agent can't set: a
   per-session identity injected by the harness, or a broker process that owns the database.
+- **Odoo is reached with one shared admin login.** An agent could edit Odoo directly, for example
+  adding a bank account to a vendor before paying it. The bank connector trusts Odoo's vendor master and
+  checks that the payment's vendor is the vendor on every bill it pays, so this is the same trust limit
+  as identity. Reconcile flags journal entries in Odoo that nobody on the desk made.
+- **The control code itself** (checks, roles, ledger, connectors, workflow builder) is fingerprinted
+  in the ledger when a person signs off on it (`python -m ledgerdb.manifest record`). `promote` refuses
+  to run, and reconcile and the scorer report it, if any of those files has changed since. This catches
+  quiet edits, not an agent that also re-records the fingerprint.
 - **`workflow.validated` is the agent's own claim** that WidgeX's `harness_check` passed. Python
   can't call it, so `promote` re-runs its own structural check instead.
 - **The hash chain has no external anchor.** Each run's head hash is written to `results.md`.
@@ -98,6 +106,7 @@ or pending per check) and adds the real-vs-simulated table.
 ```bash
 docker compose up -d db && python -m bench.reset   # fresh Odoo company + empty ledger (archives any previous run)
 python -m pytest -q                                # unit tests + a live Odoo order-to-cash test
+python -m ledgerdb.manifest record --actor <you> --role architect --note "reviewed"   # sign off on the control code
 ```
 
 Then, from a WidgeX session in this repo:

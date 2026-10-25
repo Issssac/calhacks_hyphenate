@@ -102,6 +102,8 @@ def test_version_lifecycle(conn, tmp_path, monkeypatch):
     monkeypatch.setattr(build, "PROPOSED", tmp_path / "workflows" / "proposed")
     ctx = {"actor": "orders-agent", "role": "orders", "workflow": "orders"}
 
+    from ledgerdb import manifest
+    manifest.record(conn, "lead", "architect", "test")
     out = build.compile_(["orders"])
     assert out[0]["from"] == "template"
     assert not lc.orders_proposal_valid()  # not validated yet
@@ -220,3 +222,40 @@ def test_structural_check_catches_broken_machines():
     assert any("no_such_check" in p for p in problems)
     assert any("unknown state 'nowhere'" in p for p in problems)
     assert any("orphan: unreachable" in p for p in problems)
+
+
+def test_revision_cannot_add_a_way_around_review():
+    live = build.template("orders", "ledger")
+    sneaky = json.loads(json.dumps(live))
+    # keep every control in the file, but let draft go straight to post on the agent's word
+    sneaky["states"]["draft"]["transitions"].append(
+        {"to": "post", "precedence": 30, "kind": "soft", "question": "Skip review?"})
+    problems = build.weakened(live, sneaky, "orders")
+    assert any("adds a new way into 'post'" in p for p in problems)
+    # and a chain of agent-asserted edges from begin into a write state is refused even in a new machine
+    chain = json.loads(json.dumps(live))
+    chain["states"]["begin"]["transitions"].append({"to": "post", "precedence": 99, "kind": "soft", "question": "?"})
+    assert any("post is reachable from begin without any code check" in p
+               for p in build.bypasses(chain, build.WRITE_STATES["orders"]))
+    # a hard edge with an unrelated check is still a new way in
+    hard = json.loads(json.dumps(live))
+    hard["states"]["draft"]["transitions"].append(
+        {"to": "post", "precedence": 30, "kind": "hard", "question": "?",
+         "check": {"file": build.CHECKS, "function": "orders_queue_empty"}})
+    assert any("adds a new way into 'post'" in p for p in build.weakened(live, hard, "orders"))
+    for d in build.DRIVERS:  # the templates themselves are clean
+        assert build.bypasses(build.template(d, "ledger"), build.WRITE_STATES[d]) == []
+
+
+def test_manifest_catches_edited_control_code(conn, tmp_path, monkeypatch):
+    from ledgerdb import manifest
+    f = tmp_path / "ledger_checks.py"
+    f.write_text("def check(): return False")
+    monkeypatch.setattr(manifest, "ROOT", tmp_path)
+    monkeypatch.setattr(manifest, "CONTROL_FILES", ["ledger_checks.py"])
+    assert manifest.changes(conn)[0]["problem"] == "no manifest recorded"
+    manifest.record(conn, "lead", "architect")
+    assert manifest.changes(conn) == []
+    f.write_text("def check(): return True  # quietly loosened")
+    assert manifest.changes(conn) == [{"file": "ledger_checks.py", "problem": "changed since the manifest was recorded"}]
+    assert any("control file ledger_checks.py" in p for p in build.manifest_problems(conn))

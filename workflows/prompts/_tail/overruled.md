@@ -12,7 +12,7 @@ state. Read it carefully.
    If their note leaves the right answer unclear, record what you did understand in a
    `note.question` event and do not guess beyond it.
 2. **Record the feedback.** Append `feedback.recorded` on a new `feedback:F-n`
-   (`python -m ledgerdb next-id feedback F`). The payload:
+   (`python -m ledgerdb next-id feedback F --actor <you> --role <role>`). The payload:
 
    ```json
    {"driver": "<this workflow>", "state": "<the state that was rejected>", "type": "overrule",

@@ -212,8 +212,10 @@ def run(conn) -> dict:
     sim = load_sim()
     results = [score_scenario(conn, s, sim) for s in SCENARIOS]
     tally = Counter(c["status"] for r in results for c in r["checks"])
+    from ledgerdb import manifest
     return {"scenarios": results, "tally": dict(tally), "provenance": provenance(conn),
-            "ledger_verified": db.verify(conn)["ok"]}
+            "ledger_verified": db.verify(conn)["ok"], "ledger_head": db.verify(conn)["head"],
+            "control_code_changes": manifest.changes(conn)}
 
 
 def to_markdown(out: dict) -> str:
@@ -224,6 +226,10 @@ def to_markdown(out: dict) -> str:
     for r in out["scenarios"]:
         for i, c in enumerate(r["checks"]):
             lines.append(f"| {r['id'] + ' ' + r['title'] if i == 0 else ''} | {c['check']} | {c['status']} | {c['detail']} |")
+    changes = out.get("control_code_changes") or []
+    lines += ["", f"Ledger head hash: `{out.get('ledger_head')}`. Control code: "
+              + ("unchanged since the recorded manifest." if not changes else
+                 "**changed since the recorded manifest**: " + ", ".join(c["file"] for c in changes))]
     lines += ["", "## Real vs simulated", "", "| Source | Events |", "|---|---|"]
     lines += [f"| {k} | {v} |" for k, v in out["provenance"].items()]
     return "\n".join(lines) + "\n"
