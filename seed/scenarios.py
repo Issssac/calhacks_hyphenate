@@ -34,13 +34,8 @@ SCENARIOS = [
         "expect": {"intake": "extracted",
                    "so": [("Galvanized Shackle 1/2in", 300, 5.00), ("Stainless Shackle 3/8in", 150, 7.25),
                           ("Bronze Thru-Hull 1in", 20, 38.00)],
-                   "so_after_amendment": [("Galvanized Shackle 1/2in", 300, 5.00), ("Stainless Shackle 3/8in", 150, 7.25),
-                                          ("Bronze Thru-Hull 1in", 30, 38.00)],  # once S06 has amended it
                    "pos": {"Harbor Forge": [("Galvanized Shackle 1/2in", 300, 3.10),
                                             ("Stainless Shackle 3/8in", 150, 4.80), ("Bronze Thru-Hull 1in", 20, 24.50)]},
-                   "pos_after_amendment": {"Harbor Forge": [("Galvanized Shackle 1/2in", 300, 3.10),
-                                                            ("Stainless Shackle 3/8in", 150, 4.80),
-                                                            ("Bronze Thru-Hull 1in", 30, 24.50)]},
                    "taxed": False, "bill": "matched", "paid": "exact"},
     },
     {
@@ -84,8 +79,15 @@ SCENARIOS = [
         "customer": "Pier 39 Boatworks", "sender": "Sam Okafor <purchasing@pier39boatworks.example>",
         "subject": "RE: PO P39-0912 - see attached quotation", "reply_to": "S02",
         "body": "One change please: make the Bronze Thru-Hull 1in quantity 30 instead of 20. Everything else as is.\n\nSam",
-        "pdf": None, "world": {},
-        "expect": {"intake": "amended"},
+        "pdf": None, "world": {"pay": {"kind": "exact", "addenda": "P39-0912 add-on"}},
+        # S02 was already invoiced when this arrives, so the original SO can't change: the right
+        # outcome is an add-on SO (+ PO) for the extra 10 units, invoiced on its own.
+        "expect": {"intake": "amended",
+                   "addon_so": [("Bronze Thru-Hull 1in", 10, 38.00)],
+                   "addon_po": {"Harbor Forge": [("Bronze Thru-Hull 1in", 10, 24.50)]},
+                   "controller_rejects_amendment": "SO-1002 is already invoiced and paid, so it can't be changed. Raise an add-on "
+                                                   "sales order for the 10 extra Bronze Thru-Hull 1in at $38.00 ($380.00), "
+                                                   "linked to the same quote, and invoice it separately. Keep SO-1002 as invoiced."},
     },
     {
         "id": "S07", "phase": 1, "title": "Two suppliers on one order; the electronics vendor overbills",

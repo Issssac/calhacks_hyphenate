@@ -90,6 +90,21 @@ def suggest(conn, entity: str, workflow: str, req: dict) -> dict:
             return {**base, "decision": "reject",
                     "note": "We can't source a custom davit. Cancel this sales order and tell the customer we "
                             "don't supply it."}
+        amendment = next((x for x in BY_ID.values() if x.get("reply_to") == sid
+                          and x["expect"].get("addon_so")), None)
+        if so and quote and amendment:
+            sos = [r["src"] for r in db.rows(conn, "SELECT DISTINCT src FROM doc_links WHERE rel = 'from_quote'"
+                                                   " AND dst = ? AND src LIKE 'so:%' ORDER BY seq", [quote])]
+            kinds = [r["kind"] for r in db.rows(conn, "SELECT kind FROM events WHERE entity = ? ORDER BY seq", [so])]
+            posted_then_amended = "erp.posted" in kinds and "so.amended" in kinds[kinds.index("erp.posted"):]
+            if sos and so != sos[0]:  # an add-on order raised for the amendment
+                ok = _lines(sop.get("lines")) == _expect_lines(amendment["expect"]["addon_so"])
+                return {**base, "scenario": amendment["id"], "decision": "approve" if ok else "reject",
+                        "note": "Approved: add-on order for the amendment." if ok else
+                                f"The add-on order should be exactly: {_fmt(amendment['expect']['addon_so'])}."}
+            if posted_then_amended:
+                return {**base, "scenario": amendment["id"], "decision": "reject",
+                        "note": amendment["expect"]["controller_rejects_amendment"]}
         if exp.get("so") and so:
             if _lines(sop.get("lines")) == _expect_lines(exp["so"]):
                 return {**base, "decision": "approve", "note": "Approved."}

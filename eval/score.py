@@ -138,6 +138,18 @@ def score_scenario(conn, s: dict, sim: dict) -> dict:
                    if so and r["entity"] == so]
         add("missing cost flagged for the controller", PASS if flagged else (PENDING if not so else FAIL), so or "")
 
+    if exp.get("addon_so") and quote:
+        sos = _children(conn, quote, "from_quote", "so")
+        addon = sos[1] if len(sos) > 1 else None
+        if not addon:
+            add("add-on order for the amendment", PENDING if len(sos) <= 1 else FAIL, f"SOs on the quote: {sos}")
+        else:
+            ok, why = _lines_match((db.latest_payload(conn, addon) or {}).get("lines", []), exp["addon_so"], "unit_price")
+            add("add-on order for the amendment", PASS if ok else FAIL, f"{addon}: {why}")
+            invs = _children(conn, addon, "from_so", "invoice")
+            billed = invs and db.rows(conn, "SELECT 1 FROM events WHERE entity = ? AND kind = 'erp.posted'", [invs[-1]])
+            add("add-on invoiced (no revenue leak)", PASS if billed else PENDING, invs[-1] if invs else "no invoice yet")
+        so = sos[0] if sos else None  # the original order is judged on its own, as invoiced
     inv = (_children(conn, so, "from_so", "invoice") or [None])[-1] if so else None
     if "taxed" in exp:
         posted = db.rows(conn, "SELECT payload FROM events WHERE entity = ? AND kind = 'erp.posted' ORDER BY seq DESC LIMIT 1",
