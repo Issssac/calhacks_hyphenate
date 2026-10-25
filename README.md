@@ -34,10 +34,31 @@ Claude agents), a local Odoo 18, and an Increase sandbox bank.
 | Nobody approves what they drafted | `db.append` refuses `approval.*` from any actor on the item |
 | Nothing is confirmed in Odoo without an approval after the latest draft | `db.check_post`, called by `connectors.odoo post` before any RPC |
 | Bills post only on a **code-computed** 3-way match, or with an explicit approval of the variance | `connectors.odoo match`, posting rule `matched_or_approved` |
-| Vendors are paid only after approval, and only to bank details on file | posting rule for `billpayment`; `connectors.increase send` checks the gate |
+| Vendors are paid only after approval, and only to the bank account **on file in Odoo's vendor master**, whatever the payment record says | posting rule for `billpayment`; `connectors.increase send` compares with `res.partner.bank` |
+| A workflow revision goes live only with a controller approval recorded after that exact file was validated, not from its author | `workflows.build promote` |
+| A revision can add controls, never remove them, and can't change existing policy thresholds | `promote`: structural check, `weakened()`, `policy_patch_problems()` |
 | Email is untrusted: intake can't touch the books, and injected instructions are flagged | roles + intake prompt (scenario S09) |
 | The log is tamper-evident | SQLite triggers refuse UPDATE/DELETE; `ledgerdb verify` recomputes the hash chain |
 | Our journal is reconciled against Odoo's trial balance and against the bank | `recon.py`, the reconcile workflow |
+| Real money can't be reached by accident | `connectors.increase` refuses a non-sandbox environment unless `INCREASE_ALLOW_PRODUCTION=yes` |
+
+### Limits, stated plainly
+
+- **Identities are asserted, not authenticated.** `--actor`, `--role` and `--on-behalf-of` are set by
+  the caller. The controls above stop an agent that makes a *mistake* (the wrong role, approving its
+  own work, posting before approval). They don't stop one that *lies* about who it is. All agents
+  run as one OS user, so one could also open the SQLite file directly; `ledgerdb verify` would show
+  the tampering but not prevent it. Real enforcement needs identity the agent can't set: a
+  per-session identity injected by the harness, or a broker process that owns the database.
+- **`workflow.validated` is the agent's own claim** that WidgeX's `harness_check` passed. Python
+  can't call it, so `promote` re-runs its own structural check instead.
+- **The hash chain has no external anchor.** Each run's head hash is written to `results.md`.
+- **Money goes through floats**, rounded to cents at every comparison. That's fine at this scale;
+  a production ledger would use integer cents.
+- **The benchmark controller is rule-based.** It decides business approvals from the answer key, and
+  reviews workflow revisions by rule. It rejects a revision that fails the structural check, removes
+  a control, changes existing policy, or doesn't answer open feedback. A person reading the diff
+  would catch more.
 
 ## What's real and what's simulated
 

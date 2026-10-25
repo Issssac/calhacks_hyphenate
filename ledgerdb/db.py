@@ -286,6 +286,7 @@ def append(
     on_behalf_of: str | None = None,
     policy: Policy | None = None,
     ts: str | None = None,
+    unique_entity: bool = False,
 ) -> dict[str, Any]:
     policy = policy or load_policy()
     if not actor:
@@ -343,6 +344,8 @@ def append(
     }
     conn.execute("BEGIN IMMEDIATE")
     try:
+        if unique_entity and conn.execute("SELECT 1 FROM events WHERE entity = ? LIMIT 1", (entity,)).fetchone():
+            raise LedgerError(f"{entity} already exists")
         row = conn.execute("SELECT hash FROM events ORDER BY seq DESC LIMIT 1").fetchone()
         prev = row[0] if row else GENESIS
         h = row_hash(prev, fields)
@@ -432,14 +435,31 @@ def trace(conn: sqlite3.Connection, entity: str) -> dict[str, Any]:
     return {"root": entity, "entities": sorted(chain), "governance": sorted(seen - chain), "events": events}
 
 
-def next_id(conn: sqlite3.Connection, entity_type: str, prefix: str, start: int = 1001) -> str:
-    """The next unused id for a type, e.g. next_id(conn, 'so', 'SO') -> 'SO-1001'."""
-    n = conn.execute(
-        "SELECT COUNT(DISTINCT entity) FROM events WHERE entity_type = ?", (entity_type,)
-    ).fetchone()[0]
+def next_id(conn: sqlite3.Connection, entity_type: str, prefix: str, start: int = 1001,
+            actor: str | None = None, role: str | None = None) -> str:
+    """The next unused id for a type, e.g. next_id(conn, 'so', 'SO') -> 'SO-1001'.
+
+    With an actor, the id is also reserved atomically (a `note.reserved` event on
+    reserve:<type>-<id>), so two agents asking at once never get the same id.
+    """
+    def taken(i: int) -> bool:
+        return conn.execute("SELECT 1 FROM events WHERE entity IN (?, ?) LIMIT 1",
+                            (f"{entity_type}:{prefix}-{i}", f"reserve:{entity_type}-{prefix}-{i}")).fetchone() is not None
+
+    n = conn.execute("SELECT COUNT(DISTINCT entity) FROM events WHERE entity_type = ?", (entity_type,)).fetchone()[0]
     i = start + n
-    while conn.execute(
-        "SELECT 1 FROM events WHERE entity = ? LIMIT 1", (f"{entity_type}:{prefix}-{i}",)
-    ).fetchone():
-        i += 1
-    return f"{prefix}-{i}"
+    for _ in range(1000):
+        while taken(i):
+            i += 1
+        if not actor:
+            return f"{prefix}-{i}"
+        try:
+            append(conn, actor=actor, role=role or "architect", kind="note.reserved",
+                   entity=f"reserve:{entity_type}-{prefix}-{i}", payload={"id": f"{entity_type}:{prefix}-{i}"},
+                   unique_entity=True)
+            return f"{prefix}-{i}"
+        except LedgerError as e:
+            if "already exists" not in str(e):
+                raise
+            i += 1  # someone reserved it a moment ago
+    raise LedgerError(f"could not reserve an id for {entity_type}")

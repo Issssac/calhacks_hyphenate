@@ -56,6 +56,39 @@ def pending(conn) -> list[dict]:
     return out
 
 
+def review_revision(conn, driver: str) -> dict:
+    """Rule-based review of a proposed workflow revision (the benchmark has no person to read it).
+
+    Rejects a revision that would fail promotion anyway (bad structure, removes a control,
+    changes an existing policy key), or that doesn't answer an open feedback item.
+    """
+    import json as _json
+    from workflows import build
+
+    prop = build.PROPOSED / f"{driver}.json"
+    if not prop.exists():
+        return {"decision": "reject", "note": f"There is no proposal file for {driver}."}
+    spec = _json.loads(prop.read_text(encoding="utf-8"))
+    problems = build.structural_problems(spec)
+    if build.live_path(driver).exists():
+        problems += build.weakened(_json.loads(build.live_path(driver).read_text(encoding="utf-8")), spec)
+    patch = build.PROPOSED / f"policy.{driver}.json"
+    if patch.exists():
+        problems += build.policy_patch_problems(_json.loads(patch.read_text(encoding="utf-8")))
+    proposed = db.rows(conn, "SELECT seq FROM events WHERE entity = ? AND kind = 'workflow.proposed' ORDER BY seq DESC LIMIT 1",
+                       [f"workflow:{driver}"])
+    addressed = [r["dst"] for r in db.rows(conn, "SELECT dst FROM doc_links WHERE src = ? AND rel = 'addresses'"
+                                                 " AND seq = ?", [f"workflow:{driver}", proposed[0]["seq"]])] if proposed else []
+    open_fb = {r["entity"] for r in db.rows(conn, "SELECT entity FROM feedback_open WHERE driver = ?", [driver])}
+    if not addressed:
+        problems.append("it doesn't say which feedback it answers")
+    elif not any(a in open_fb for a in addressed):
+        problems.append(f"the feedback it answers ({', '.join(addressed)}) is already closed")
+    if problems:
+        return {"decision": "reject", "note": "Not adopted: " + "; ".join(problems) + "."}
+    return {"decision": "approve", "note": f"Adopted: answers {', '.join(addressed)}; adds controls without removing any."}
+
+
 def suggest(conn, entity: str, workflow: str, req: dict) -> dict:
     """What the answer key says a correct controller decides here."""
     state = req.get("review_state", "")
@@ -73,7 +106,7 @@ def suggest(conn, entity: str, workflow: str, req: dict) -> dict:
     base = {"scenario": sid, "scenario_title": s.get("title"), "also": items}
 
     if entity.startswith("workflow:") or state == "adopt":
-        return {**base, "decision": "approve", "note": "Adopted: the revision answers the feedback."}
+        return {**base, **review_revision(conn, entity.split(":", 1)[1])}
 
     if workflow == "intake" and state == "clarify":
         if exp.get("so"):

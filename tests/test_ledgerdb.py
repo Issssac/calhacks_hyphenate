@@ -198,3 +198,19 @@ def test_cli_roundtrip(tmp_path, capsys):
     assert cli_main(["--db", path, "queue", "intake"]) == 0
     assert json.loads(capsys.readouterr().out)[0]["entity"] == "quote:Q-1"
     assert cli_main(["--db", path, "verify"]) == 0
+
+
+def test_next_id_reserves(conn):
+    a = db.next_id(conn, "so", "SO", actor="orders-agent", role="orders")
+    b = db.next_id(conn, "so", "SO", actor="billing-agent", role="billing")
+    assert a == "SO-1001" and b == "SO-1002"  # the first is reserved even before anything is drafted
+    assert db.rows(conn, "SELECT * FROM open_items") == []  # reservations are not work items
+
+
+def test_increase_refuses_production_by_default(monkeypatch):
+    from connectors import increase
+    monkeypatch.setenv("INCREASE_API_KEY", "x")
+    monkeypatch.setenv("INCREASE_ENV", "production")
+    monkeypatch.delenv("INCREASE_ALLOW_PRODUCTION", raising=False)
+    with pytest.raises(increase.BankError, match="real money"):
+        increase.Increase()

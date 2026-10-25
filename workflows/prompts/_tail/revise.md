@@ -23,6 +23,11 @@ the repository root, the `cwd` you run tools from.
      `structure/policy.json` directly.** Write only the keys you add or change to
      `workflows/proposed/policy.<workflow>.json` (a JSON object that is merged into the policy). It is
      part of your proposal, shows in the diff, and takes effect only when the revision is promoted.
+     A proposal may only **add** keys, such as `contract_prices`. Changing an existing threshold
+     (margin floor, tolerances, the controller) is refused. If you think one is wrong, say so in
+     your proposal for the controller to change themselves.
+   - A revision may add states, checks and review points, but never remove one. `promote` refuses
+     a machine that drops any code check or review point the live version has.
 4. Check it: `await api.harness_check(path)` with the absolute path of the proposed JSON. Fix and
    repeat until `ok` is true. Then record exactly that file as checked, passing the result on stdin:
    `api.run(["python", "-m", "workflows.build", "record-validation", "<workflow>", "--ok", "true",

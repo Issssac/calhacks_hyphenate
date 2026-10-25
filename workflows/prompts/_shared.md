@@ -29,7 +29,7 @@ prompt says which workflow and state you are in. These rules always apply.
 | `python -m ledgerdb focus <workflow> <entity> --actor .. --role ..` | declare the item you are working on (the code checks look at it) |
 | `python -m ledgerdb state <entity>` / `trace <entity>` | one item's events / everything linked to it |
 | `python -m ledgerdb append --actor .. --role .. --workflow .. --kind <k> --entity <type:id> --payload @file.json --source <ref> --link rel=type:id` | record an event |
-| `python -m ledgerdb next-id <type> <PREFIX>` | next free id, e.g. `next-id so SO` gives `SO-1003` |
+| `python -m ledgerdb next-id <type> <PREFIX> --actor .. --role ..` | next free id, reserved for you so no other agent gets it, e.g. `next-id so SO ...` gives `SO-1003` |
 | `python -m ledgerdb feedback` | overrules and mistakes not yet answered |
 | `python -m ledgerdb query "<SQL>"` | read-only SQL over `events` and the views (`open_items`, `doc_links`, `journal`, `trial_balance`, ...) |
 | `python -m connectors.odoo survey` / `read <model> '<domain>' fields...` | look things up in the books |

@@ -39,6 +39,9 @@ class Increase:
     def __init__(self) -> None:
         self.key = need("INCREASE_API_KEY")["INCREASE_API_KEY"]
         env = os.environ.get("INCREASE_ENV", "sandbox")
+        if env != "sandbox" and os.environ.get("INCREASE_ALLOW_PRODUCTION") != "yes":
+            raise BankError("INCREASE_ENV is not 'sandbox': refusing to touch real money "
+                            "unless INCREASE_ALLOW_PRODUCTION=yes is set deliberately")
         self.base = "https://sandbox.increase.com" if env == "sandbox" else "https://api.increase.com"
         self.session = requests.Session()
 
@@ -192,6 +195,22 @@ def simulate_inbound(conn, b: Increase, amount: float, company: str, description
     return {"inbound_ach_transfer": t["id"], "status": t.get("status")}
 
 
+def vendor_accounts_on_file(vendor: str) -> set[tuple[str, str]]:
+    """(routing, account) pairs Odoo has for this vendor: res.partner.bank, routing in the bank's BIC."""
+    from . import odoo
+    o = odoo.Odoo()
+    partners = o.search_read("res.partner", [("name", "=ilike", vendor), ("supplier_rank", ">", 0)], ["id"])
+    if not partners:
+        return set()
+    out = set()
+    for acct in o.search_read("res.partner.bank", [("partner_id", "in", [p["id"] for p in partners])],
+                              ["acc_number", "bank_id"]):
+        if acct["bank_id"]:
+            bic = o.read("res.bank", [acct["bank_id"][0]], ["bic"])[0]["bic"]
+            out.add((str(bic or ""), str(acct["acc_number"])))
+    return out
+
+
 def send(conn, b: Increase, entity: str, ctx: dict) -> dict:
     """Pay a vendor by ACH, only if the ledger's approval gate passes for this bill payment."""
     db.check_post(conn, entity)
@@ -199,6 +218,12 @@ def send(conn, b: Increase, entity: str, ctx: dict) -> dict:
     dest = pay.get("vendor_bank") or {}
     if not dest.get("routing_number") or not dest.get("account_number"):
         raise BankError(f"{entity} has no vendor_bank routing_number/account_number")
+    # Pay only to the vendor's bank account on file in the books, whatever the payload says.
+    # The payload was written by an agent; the vendor master is the source of truth.
+    on_file = vendor_accounts_on_file(pay.get("vendor") or "")
+    if (str(dest["routing_number"]), str(dest["account_number"])) not in on_file:
+        raise BankError(f"{entity}: {dest['routing_number']}/{dest['account_number']} is not a bank account on file "
+                        f"for {pay.get('vendor')!r} in Odoo ({len(on_file)} on file). Refusing to pay.")
     amount = round(sum(float(a["amount"]) for a in pay.get("applications", [])), 2)
     bank = load_bank()
     t = b.request("POST", "/ach_transfers", idempotency_key=entity, body={

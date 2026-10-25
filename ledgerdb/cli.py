@@ -114,9 +114,11 @@ def main(argv: list[str] | None = None) -> int:
     fo.add_argument("--role", default=os.environ.get("LEDGER_ROLE"))
     fo.add_argument("--workflow-version", type=int)
 
-    n = sub.add_parser("next-id", help="next unused id for a type")
+    n = sub.add_parser("next-id", help="next unused id for a type (reserved atomically when --actor is given)")
     n.add_argument("entity_type")
     n.add_argument("prefix")
+    n.add_argument("--actor", default=os.environ.get("LEDGER_ACTOR"))
+    n.add_argument("--role", default=os.environ.get("LEDGER_ROLE"))
 
     args = p.parse_args(argv)
     path = Path(args.db) if args.db else None
@@ -151,6 +153,12 @@ def main(argv: list[str] | None = None) -> int:
                            entity=f"focus:{args.driver}", payload={"entity": args.entity},
                            workflow=args.driver,
                            workflow_version=args.workflow_version))
+            return 0
+
+        if args.cmd == "next-id" and args.actor:
+            conn = db.connect(path)
+            _out({"id": db.next_id(conn, args.entity_type, args.prefix, actor=args.actor, role=args.role),
+                  "reserved": True})
             return 0
 
         conn = db.connect(path, readonly=True)

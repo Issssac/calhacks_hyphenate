@@ -97,6 +97,7 @@ def test_feedback_checks(conn):
 def test_version_lifecycle(conn, tmp_path, monkeypatch):
     for name in ("HARNESS_DIR", "PROPOSED", "HISTORY", "PROMPTS"):
         monkeypatch.setattr(build, name, tmp_path / name.lower())
+    monkeypatch.setattr(build, "POLICY", tmp_path / "policy.json")
     monkeypatch.setattr(lc, "ROOT", tmp_path)
     monkeypatch.setattr(build, "PROPOSED", tmp_path / "workflows" / "proposed")
     ctx = {"actor": "orders-agent", "role": "orders", "workflow": "orders"}
@@ -118,6 +119,12 @@ def test_version_lifecycle(conn, tmp_path, monkeypatch):
     build.record_validation(conn, "orders", True, None, ctx)
 
     db.append(conn, kind="feedback.recorded", entity="feedback:F-1", payload={"driver": "orders", "note": "x"}, **ctx)
+    with pytest.raises(SystemExit, match="no controller approval"):
+        build.promote(conn, "orders", ctx, ["feedback:F-1"], "first version")
+    # the first version is covered by the controller's approval of the architect's design
+    db.append(conn, actor="architect-agent", role="architect", kind="structure.design", entity="structure:design")
+    db.append(conn, actor="lead", role="controller", on_behalf_of="human:controller", kind="approval.granted",
+              entity="structure:design")
     r = build.promote(conn, "orders", ctx, ["feedback:F-1"], "first version")
     assert r["version"] == 1
     assert lc.orders_feedback_closed()
@@ -130,6 +137,13 @@ def test_version_lifecycle(conn, tmp_path, monkeypatch):
     (build.PROPOSED / "prompts" / "orders" / "draft.md").write_text("new rule: check contract prices")
     build.record_validation(conn, "orders", True, None, ctx)
     assert "contract prices" in build.diff("orders")
+    with pytest.raises(SystemExit, match="no controller approval"):
+        build.promote(conn, "orders", ctx, [], "contract prices")
+    # the proposer can't approve its own revision
+    db.append(conn, actor="orders-agent", role="controller", on_behalf_of="human:controller",
+              kind="approval.granted", entity="workflow:orders")
+    db.append(conn, actor="controller-agent", role="controller", on_behalf_of="model:controller",
+              kind="approval.granted", entity="workflow:orders")
     r2 = build.promote(conn, "orders", ctx, [], "contract prices")
     assert r2["version"] == 2
     assert (build.HISTORY / "orders" / "v1" / "orders.json").exists()
@@ -166,3 +180,43 @@ def test_every_template_references_real_checks(mode):
             for t in st.get("transitions", []):
                 if t["kind"] == "hard":
                     assert callable(getattr(lc, t["check"]["function"], None)), t["check"]["function"]
+
+
+def test_promote_refuses_weaker_machines_and_threshold_changes(conn, tmp_path, monkeypatch):
+    for name in ("HARNESS_DIR", "PROPOSED", "HISTORY", "PROMPTS"):
+        monkeypatch.setattr(build, name, tmp_path / name.lower())
+    monkeypatch.setattr(build, "POLICY", tmp_path / "policy.json")
+    (tmp_path / "policy.json").write_text(json.dumps({"margin_floor": 0.2}))
+    live = build.template("orders", "ledger")
+    build.HARNESS_DIR.mkdir(parents=True)
+    (build.HARNESS_DIR / "orders.json").write_text(json.dumps(live))
+    ctx = {"actor": "orders-agent", "role": "orders", "workflow": "orders"}
+
+    weaker = json.loads(json.dumps(live))
+    weaker["states"]["draft"]["transitions"] = [t for t in weaker["states"]["draft"]["transitions"] if t["kind"] != "hard"]
+    assert build.weakened(live, weaker) == ["removes check 'orders_drafts_valid'"]
+    assert build.weakened(live, build.template("orders", "human")) == []  # a card or the ledger: same review point
+
+    build.PROPOSED.mkdir(parents=True)
+    (build.PROPOSED / "orders.json").write_text(json.dumps(weaker))
+    build.record_validation(conn, "orders", True, None, ctx)
+    with pytest.raises(SystemExit, match="removes check"):
+        build.promote(conn, "orders", ctx, [])
+
+    (build.PROPOSED / "orders.json").write_text(json.dumps(live))
+    (build.PROPOSED / "policy.orders.json").write_text(json.dumps({"margin_floor": 0.05, "contract_prices": {}}))
+    build.record_validation(conn, "orders", True, None, ctx)
+    with pytest.raises(SystemExit, match="changes existing policy key 'margin_floor'"):
+        build.promote(conn, "orders", ctx, [])
+    assert build.policy_patch_problems({"contract_prices": {"Bay Rigging Co": {}}}) == []
+
+
+def test_structural_check_catches_broken_machines():
+    spec = build.template("cash", "ledger")
+    assert build.structural_problems(spec) == []
+    spec["states"]["apply"]["transitions"][0]["check"]["function"] = "no_such_check"
+    spec["states"]["orphan"] = {"prompt": "x", "transitions": [{"to": "nowhere", "precedence": 10, "kind": "soft", "question": "?"}]}
+    problems = build.structural_problems(spec)
+    assert any("no_such_check" in p for p in problems)
+    assert any("unknown state 'nowhere'" in p for p in problems)
+    assert any("orphan: unreachable" in p for p in problems)

@@ -384,17 +384,115 @@ def diff(driver: str) -> str:
     return "\n\n".join(p for p in parts if p.strip()) or "(no differences)"
 
 
+def structural_problems(spec: dict) -> list[str]:
+    """Our own check of a machine, independent of the agent's harness_check claim."""
+    import importlib.util
+    problems: list[str] = []
+    states = spec.get("states") or {}
+    if "begin" not in states:
+        return ["no begin state"]
+    spec_ = importlib.util.spec_from_file_location("ledger_checks_for_validation", ROOT / "checks" / "ledger_checks.py")
+    lc = importlib.util.module_from_spec(spec_)
+    spec_.loader.exec_module(lc)
+    for name, st in states.items():
+        if not isinstance(st.get("prompt"), str) or not st["prompt"].strip():
+            problems.append(f"{name}: no prompt")
+        trs = st.get("transitions", [])
+        if not st.get("terminal") and not trs:
+            problems.append(f"{name}: not terminal and no transitions")
+        precs = [t.get("precedence") for t in trs]
+        if len(precs) != len(set(precs)):
+            problems.append(f"{name}: duplicate precedence")
+        for t in trs:
+            if t.get("to") not in states:
+                problems.append(f"{name}: transition to unknown state {t.get('to')!r}")
+            if t.get("kind") == "hard":
+                fn = (t.get("check") or {}).get("function")
+                if (t.get("check") or {}).get("file") != CHECKS or not callable(getattr(lc, fn or "", None)):
+                    problems.append(f"{name}: hard check {fn!r} is not a function in {CHECKS}")
+    seen, todo = {"begin"}, ["begin"]
+    while todo:
+        for t in states[todo.pop()].get("transitions", []):
+            if t.get("to") in states and t["to"] not in seen:
+                seen.add(t["to"])
+                todo.append(t["to"])
+    problems += [f"{n}: unreachable from begin" for n in states if n not in seen]
+    if not any(st.get("terminal") for st in states.values()):
+        problems.append("no terminal state")
+    return problems
+
+
+def _controls(spec: dict) -> set[tuple]:
+    """The controls in a machine: every code check and every review point."""
+    out = set()
+    for name, st in (spec.get("states") or {}).items():
+        fns = [(t.get("check") or {}).get("function") or "" for t in st.get("transitions", []) if t.get("kind") == "hard"]
+        # A review point is the same control whether a person decides on a card (human mode)
+        # or through the ledger (ledger mode).
+        if "review" in st or any(f.endswith("_decision_approved") for f in fns):
+            out.add(("review", name))
+        for f in fns:
+            if "_decision_" not in f and "_awaiting_" not in f:
+                out.add(("check", f))
+    return out
+
+
+def weakened(live: dict, new: dict) -> list[str]:
+    """A revision may add controls, never remove them."""
+    missing = _controls(live) - _controls(new)
+    return [f"removes {kind} {what!r}" for kind, what in sorted(missing, key=str)]
+
+
+def policy_patch_problems(patch: dict) -> list[str]:
+    """Proposals may add policy (e.g. contract_prices); changing an existing key is a controller action."""
+    current = json.loads(POLICY.read_text(encoding="utf-8")) if POLICY.exists() else {}
+    return [f"changes existing policy key {k!r}" for k in patch if k in current and current[k] != patch[k]]
+
+
+def approval_for(conn, driver: str, validated_seq: int, proposers: set[str]) -> dict | None:
+    """A controller's approval of this exact proposal: recorded after it was validated, not by its author."""
+    row = conn.execute("SELECT seq, actor, payload FROM events WHERE entity = ? AND kind = 'approval.granted'"
+                       " AND seq > ? ORDER BY seq DESC LIMIT 1", (f"workflow:{driver}", validated_seq)).fetchone()
+    if not row or row[1] in proposers:
+        return None
+    rejected = conn.execute("SELECT 1 FROM events WHERE entity = ? AND kind = 'approval.rejected' AND seq > ?",
+                            (f"workflow:{driver}", row[0])).fetchone()
+    return None if rejected else {"seq": row[0], "actor": row[1]}
+
+
 def promote(conn, driver: str, ctx: dict, addresses: list[str], summary: str = "") -> dict:
     prop = PROPOSED / f"{driver}.json"
     if not prop.exists():
         raise SystemExit(f"nothing proposed for {driver}")
     s = sha(prop)
-    ok = conn.execute("SELECT 1 FROM events WHERE kind = 'workflow.validated' AND entity = ?"
-                      " AND json_extract(payload, '$.sha256') = ? AND json_extract(payload, '$.ok') = 1",
-                      (f"workflow:{driver}", s)).fetchone()
+    ok = conn.execute("SELECT seq FROM events WHERE kind = 'workflow.validated' AND entity = ?"
+                      " AND json_extract(payload, '$.sha256') = ? AND json_extract(payload, '$.ok') = 1"
+                      " ORDER BY seq DESC LIMIT 1", (f"workflow:{driver}", s)).fetchone()
     if not ok:
         raise SystemExit(f"{prop} was not validated in this exact form; run harness_check and record it")
+    spec_new = json.loads(prop.read_text(encoding="utf-8"))
+    problems = structural_problems(spec_new)
+    if live_path(driver).exists():
+        problems += weakened(json.loads(live_path(driver).read_text(encoding="utf-8")), spec_new)
+    patch_file = PROPOSED / f"policy.{driver}.json"
+    if patch_file.exists():
+        problems += policy_patch_problems(json.loads(patch_file.read_text(encoding="utf-8")))
+    if problems:
+        raise SystemExit(f"refusing to promote {driver}: " + "; ".join(problems))
     cur = current_version(conn, driver)
+    proposers = {r[0] for r in conn.execute(
+        "SELECT DISTINCT actor FROM events WHERE entity = ? AND kind IN ('workflow.proposed', 'workflow.validated')"
+        " AND seq > COALESCE((SELECT MAX(seq) FROM events WHERE entity = ? AND kind = 'workflow.adopted'), 0)",
+        (f"workflow:{driver}", f"workflow:{driver}"))} | {ctx["actor"]}
+    approval = approval_for(conn, driver, ok[0], proposers)
+    if not approval and cur == 0:
+        # First version of a pipeline: the controller's approval of the architect's design covers it.
+        design = conn.execute("SELECT seq, actor FROM events WHERE entity = 'structure:design'"
+                              " AND kind = 'approval.granted' ORDER BY seq DESC LIMIT 1").fetchone()
+        approval = {"seq": design[0], "actor": design[1], "via": "pipeline approval"} if design else None
+    if not approval:
+        raise SystemExit(f"refusing to promote {driver}: no controller approval.granted on workflow:{driver} after "
+                         "this proposal was validated (and not by its author)")
     diff_text = diff(driver)
     live = live_path(driver)
     if live.exists():
@@ -430,6 +528,7 @@ def promote(conn, driver: str, ctx: dict, addresses: list[str], summary: str = "
     ev = db.append(conn, kind="workflow.adopted", entity=f"workflow:{driver}", payload={
         "version": cur + 1, "previous": cur, "file": str(live), "sha256": sha(live), "proposal_sha256": s,
         "prompts_changed": changed_prompts, "policy_changed": policy_changed, "summary": summary, "diff": diff_text[:20000],
+        "approved_by": approval,
         "archived": str(HISTORY / driver / f"v{cur}") if cur else None},
         links=[{"rel": "addresses", "to": a} for a in addresses], **ctx)
     return {"driver": driver, "version": cur + 1, "live": str(live), "event": ev}
