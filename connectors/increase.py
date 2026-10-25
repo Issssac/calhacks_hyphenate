@@ -237,7 +237,11 @@ def send(conn, b: Increase, entity: str, ctx: dict) -> dict:
                         f"for {pay.get('vendor')!r} in Odoo ({len(on_file)} on file). Refusing to pay.")
     amount = round(sum(float(a["amount"]) for a in pay.get("applications", [])), 2)
     bank = load_bank()
-    t = b.request("POST", "/ach_transfers", idempotency_key=entity, body={
+    # Ids restart with each ledger (run), so the key must also name the ledger: its genesis row's hash.
+    # Keyed on the entity alone, a reset run's BP-1001 replayed the previous run's transfer.
+    genesis = conn.execute("SELECT hash FROM events ORDER BY seq LIMIT 1").fetchone()[0]
+    attempt = conn.execute("SELECT COUNT(*) FROM events WHERE entity = ? AND kind = 'billpayment.sent'", (entity,)).fetchone()[0]
+    t = b.request("POST", "/ach_transfers", idempotency_key=f"{genesis[:16]}:{entity}:{attempt}", body={
         "account_id": bank["account_id"], "amount": int(round(amount * 100)),
         "routing_number": dest["routing_number"], "account_number": dest["account_number"],
         "statement_descriptor": f"{entity.split(':', 1)[1]} {pay.get('vendor', '')}"[:200],
