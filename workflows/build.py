@@ -553,6 +553,15 @@ def weakened(live: dict, new: dict, driver: str | None = None) -> list[str]:
     out += [f"adds a new way into {to!r} (from {frm!r}, {kind}{', check ' + fn if fn else ''})"
             for frm, to, kind, fn, _ in sorted(added, key=str)]
     out += bypasses(new, writes)
+    # A hook's token is bound to its id in this checkout (WidgeX HookSecrets). A revision that keeps
+    # the id keeps working with no one involved; one that renames or drops a hook would cut the wiring
+    # and need a person to make a new token. (Adding one is harmless: it just waits for its token.)
+    def hook_ids(spec: dict) -> set[str]:
+        return {t.get("id") for t in (spec.get("harness") or {}).get("triggers", []) if t.get("kind") == "hook"}
+    lost = hook_ids(live) - hook_ids(new)
+    if lost:
+        out.append(f"changes the workflow's hooks (drops {sorted(lost)}); a hook's token is tied to its id, "
+                   "so a revision must keep every existing hook")
     return out
 
 

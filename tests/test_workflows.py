@@ -286,3 +286,16 @@ def test_woken_driver_goes_to_the_decision(conn):
     db.append(conn, kind="erp.posted", entity="so:SO-1", payload={"model": "sale.order", "id": 1}, **ORD)
     assert not lc.orders_decided_controller_review_approved()
     assert lc.controller_nothing_open()
+
+
+def test_revision_must_keep_the_hooks():
+    live = build.template("orders", "ledger", "hooks")
+    same = json.loads(json.dumps(live))
+    same["states"]["draft"]["prompt"] += " (reworded)"
+    assert build.weakened(live, same, "orders") == []  # revising keeps the hook, so the token keeps working
+    changed = json.loads(json.dumps(live))
+    changed["harness"]["triggers"][0]["id"] = "hook-rdorders2"
+    assert any("changes the workflow's hooks" in p for p in build.weakened(live, changed, "orders"))
+    dropped = json.loads(json.dumps(live))
+    dropped.pop("harness")
+    assert any("changes the workflow's hooks" in p for p in build.weakened(live, dropped, "orders"))
