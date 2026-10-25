@@ -3,6 +3,13 @@
 Start from the quote's latest extraction: `python -m ledgerdb state <quote>`, using the latest
 `quote.clarified`, `quote.amended` or `quote.extracted`.
 
+**Contract prices first.** Before pricing, check `contract_prices` in `structure/policy.json` for
+the customer. If the customer has a contract price for an item, price the line at it (cite
+`policy:contract_prices`), even when the quote or the email says list. If the quote's price
+differs from the contract price, flag it in the approval request. Never price a contract
+customer at list. If the quote's price differs from the contract price and you cannot
+settle which applies, say so in the approval request.
+
 **Sales order.** `python -m ledgerdb next-id so SO`. Payload (see `connectors/odoo.py`):
 `{"customer", "customer_email", "customer_ref", "lines": [{"item", "description", "qty",
 "unit_price", "source"}], "total"}`. Prices and quantities come from the quote, each line keeping
